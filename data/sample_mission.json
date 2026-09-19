@@ -1,0 +1,62 @@
+{
+  "name": "SAR_Cascade_Mountain_05",
+  "description": "Critical Search and Rescue mission in mountainous terrain following avalanche disaster",
+  "ambient_wind": {
+    "speed_mps": 4.5,
+    "direction_degrees": 55.0
+  },
+  "drones": [
+    {
+      "id": "UAV-01",
+      "model": "DJI-Matrice-350-RTK",
+      "battery_joules": 360000.0,
+      "safety_reserve_ratio": 0.15,
+      "max_flight_time_seconds": 2400.0,
+      "cruise_speed_mps": 14.5,
+      "launch_depot_id": 0,
+      "recovery_depot_id": 0
+    },
+    {
+      "id": "UAV-02",
+      "model": "DJI-Matrice-350-RTK",
+      "battery_joules": 360000.0,
+      "safety_reserve_ratio": 0.15,
+      "max_flight_time_seconds": 2400.0,
+      "cruise_speed_mps": 14.5,
+      "launch_depot_id": 0,
+      "recovery_depot_id": 0
+    },
+    {
+      "id": "UAV-03",
+      "model": "DJI-Matrice-350-RTK",
+      "battery_joules": 360000.0,
+      "safety_reserve_ratio": 0.15,
+      "max_flight_time_seconds": 2400.0,
+      "cruise_speed_mps": 14.5,
+      "launch_depot_id": 0,
+      "recovery_depot_id": 0
+    }
+  ],
+  "targets": [
+    {"id": 0, "name": "BaseCamp-Alpha", "x": 0.0, "y": 0.0, "elevation": 1200.0, "priority_score": 0.0, "dwell_time": 0.0},
+    {"id": 1, "name": "Avalanche-Debris-A", "x": 350.0, "y": 420.0, "elevation": 1350.0, "priority_score": 95.0, "dwell_time": 45.0},
+    {"id": 2, "name": "Shelter-Cabin-North", "x": 580.0, "y": 620.0, "elevation": 1420.0, "priority_score": 85.0, "dwell_time": 30.0},
+    {"id": 3, "name": "Trailhead-Marker-4", "x": 210.0, "y": 780.0, "elevation": 1380.0, "priority_score": 60.0, "dwell_time": 25.0},
+    {"id": 4, "name": "Thermal-Contact-101", "x": -250.0, "y": 550.0, "elevation": 1310.0, "priority_score": 90.0, "dwell_time": 40.0},
+    {"id": 5, "name": "Ravine-Overlook", "x": -480.0, "y": 380.0, "elevation": 1260.0, "priority_score": 75.0, "dwell_time": 30.0},
+    {"id": 6, "name": "Frozen-Creek-Bend", "x": -620.0, "y": 150.0, "elevation": 1210.0, "priority_score": 50.0, "dwell_time": 20.0},
+    {"id": 7, "name": "Stranded-Skier-Beacon", "x": -520.0, "y": -310.0, "elevation": 1290.0, "priority_score": 100.0, "dwell_time": 60.0},
+    {"id": 8, "name": "South-Ridge-Outpost", "x": -320.0, "y": -580.0, "elevation": 1370.0, "priority_score": 70.0, "dwell_time": 30.0},
+    {"id": 9, "name": "Gorge-Crossing-Point", "x": -110.0, "y": -720.0, "elevation": 1250.0, "priority_score": 65.0, "dwell_time": 25.0},
+    {"id": 10, "name": "Pine-Grove-Clearing", "x": 180.0, "y": -650.0, "elevation": 1280.0, "priority_score": 45.0, "dwell_time": 20.0},
+    {"id": 11, "name": "Emergency-SOS-Smoke", "x": 420.0, "y": -480.0, "elevation": 1330.0, "priority_score": 95.0, "dwell_time": 50.0},
+    {"id": 12, "name": "East-Pass-Junction", "x": 650.0, "y": -220.0, "elevation": 1390.0, "priority_score": 55.0, "dwell_time": 25.0},
+    {"id": 13, "name": "Radio-Repeater-Tower", "x": 750.0, "y": 120.0, "elevation": 1450.0, "priority_score": 80.0, "dwell_time": 35.0},
+    {"id": 14, "name": "Glacier-Moraine-Edge", "x": 520.0, "y": 320.0, "elevation": 1400.0, "priority_score": 70.0, "dwell_time": 30.0},
+    {"id": 15, "name": "Upper-Plateau-West", "x": -150.0, "y": 280.0, "elevation": 1270.0, "priority_score": 40.0, "dwell_time": 20.0},
+    {"id": 16, "name": "Upper-Plateau-East", "x": 180.0, "y": 240.0, "elevation": 1260.0, "priority_score": 40.0, "dwell_time": 20.0},
+    {"id": 17, "name": "Lower-Basin-South", "x": 50.0, "y": -350.0, "elevation": 1220.0, "priority_score": 35.0, "dwell_time": 20.0},
+    {"id": 18, "name": "Canyon-Mouth-Cache", "x": -350.0, "y": -120.0, "elevation": 1230.0, "priority_score": 50.0, "dwell_time": 25.0},
+    {"id": 19, "name": "Timberline-Shelter", "x": 380.0, "y": 80.0, "elevation": 1310.0, "priority_score": 60.0, "dwell_time": 30.0}
+  ]
+}

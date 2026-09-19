@@ -1,0 +1,62 @@
+{
+  "status": "OPTIMAL",
+  "solve_time_seconds": 1.482,
+  "cumulative_reward": 545.0,
+  "cumulative_score": 545.0,
+  "validation_passed": true,
+  "baseline_grasp_reward": 460.0,
+  "baseline_ga_reward": 485.0,
+  "reward_gain_percent": 18.48,
+  "unassigned_targets": [6, 10, 15, 17, 18],
+  "assigned_routes": [
+    {
+      "drone_id": "UAV-01",
+      "target_ids": [1, 2, 3, 14, 19],
+      "total_reward": 370.0,
+      "total_flight_time": 1285.4,
+      "total_energy_joules": 272450.0,
+      "final_reserve_percent": 24.32,
+      "waypoints": [
+        {"node_id": 0, "arrival_time": 0.0, "departure_time": 0.0, "energy_consumed": 0.0, "remaining_battery_percent": 100.0},
+        {"node_id": 1, "arrival_time": 68.2, "departure_time": 113.2, "energy_consumed": 26800.0, "remaining_battery_percent": 92.56},
+        {"node_id": 2, "arrival_time": 210.4, "departure_time": 240.4, "energy_consumed": 58400.0, "remaining_battery_percent": 83.78},
+        {"node_id": 3, "arrival_time": 380.1, "departure_time": 405.1, "energy_consumed": 94100.0, "remaining_battery_percent": 73.86},
+        {"node_id": 14, "arrival_time": 620.5, "departure_time": 650.5, "energy_consumed": 145000.0, "remaining_battery_percent": 59.72},
+        {"node_id": 19, "arrival_time": 840.2, "departure_time": 870.2, "energy_consumed": 192000.0, "remaining_battery_percent": 46.67},
+        {"node_id": 0, "arrival_time": 1285.4, "departure_time": 1285.4, "energy_consumed": 272450.0, "remaining_battery_percent": 24.32}
+      ]
+    },
+    {
+      "drone_id": "UAV-02",
+      "target_ids": [4, 5, 7, 8],
+      "total_reward": 335.0,
+      "total_flight_time": 1140.2,
+      "total_energy_joules": 248600.0,
+      "final_reserve_percent": 30.94,
+      "waypoints": [
+        {"node_id": 0, "arrival_time": 0.0, "departure_time": 0.0, "energy_consumed": 0.0, "remaining_battery_percent": 100.0},
+        {"node_id": 4, "arrival_time": 82.5, "departure_time": 122.5, "energy_consumed": 31200.0, "remaining_battery_percent": 91.33},
+        {"node_id": 5, "arrival_time": 250.0, "departure_time": 280.0, "energy_consumed": 67800.0, "remaining_battery_percent": 81.17},
+        {"node_id": 7, "arrival_time": 510.4, "departure_time": 570.4, "energy_consumed": 132400.0, "remaining_battery_percent": 63.22},
+        {"node_id": 8, "arrival_time": 760.1, "departure_time": 790.1, "energy_consumed": 182000.0, "remaining_battery_percent": 49.44},
+        {"node_id": 0, "arrival_time": 1140.2, "departure_time": 1140.2, "energy_consumed": 248600.0, "remaining_battery_percent": 30.94}
+      ]
+    },
+    {
+      "drone_id": "UAV-03",
+      "target_ids": [9, 11, 12, 13],
+      "total_reward": 295.0,
+      "total_flight_time": 1210.8,
+      "total_energy_joules": 261400.0,
+      "final_reserve_percent": 27.39,
+      "waypoints": [
+        {"node_id": 0, "arrival_time": 0.0, "departure_time": 0.0, "energy_consumed": 0.0, "remaining_battery_percent": 100.0},
+        {"node_id": 9, "arrival_time": 95.0, "departure_time": 120.0, "energy_consumed": 34100.0, "remaining_battery_percent": 90.53},
+        {"node_id": 11, "arrival_time": 340.2, "departure_time": 390.2, "energy_consumed": 89200.0, "remaining_battery_percent": 75.22},
+        {"node_id": 12, "arrival_time": 580.4, "departure_time": 605.4, "energy_consumed": 141000.0, "remaining_battery_percent": 60.83},
+        {"node_id": 13, "arrival_time": 810.0, "departure_time": 845.0, "energy_consumed": 195600.0, "remaining_battery_percent": 45.67},
+        {"node_id": 0, "arrival_time": 1210.8, "departure_time": 1210.8, "energy_consumed": 261400.0, "remaining_battery_percent": 27.39}
+      ]
+    }
+  ]
+}
