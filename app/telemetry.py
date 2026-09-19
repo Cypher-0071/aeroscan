@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import pandas as pd
 
 from core.contracts import CandidateRoute, DroneSpec, FleetSchedule, InstanceContext
+
+
+def calculate_heading_deg(x1: float, y1: float, x2: float, y2: float) -> float:
+    """Calculates compass heading angle in degrees (0° = North, 90° = East)."""
+    dx = x2 - x1
+    dy = y2 - y1
+    if abs(dx) < 1e-6 and abs(dy) < 1e-6:
+        return 0.0
+    heading = (90.0 - math.degrees(math.atan2(dy, dx))) % 360.0
+    return round(heading, 1)
 
 
 def interpolate_drone_state(
@@ -16,11 +27,15 @@ def interpolate_drone_state(
     drone: DroneSpec,
 ) -> dict[str, Any]:
     """
-    Interpolates a drone's precise 3D kinematic position, flight status, and battery SoC
-    at an arbitrary mission timestamp t_sec.
+    Interpolates a drone's precise 3D kinematic position, flight status, heading,
+    groundspeed, and battery SoC at an arbitrary mission timestamp t_sec.
     """
     node_map = {n.id: n for n in instance.targets}
     waypoints = route.waypoints
+    wind_spd, wind_dir_rad = instance.ambient_wind
+
+    # Baseline nominal power calculation from drone battery & flight endurance
+    nominal_power = getattr(drone, "battery_joules", 360000.0) / max(getattr(drone, "max_flight_time", 2400.0), 1.0)
 
     if not waypoints:
         launch = node_map.get(drone.launch_depot_id, instance.targets[0])
@@ -33,6 +48,12 @@ def interpolate_drone_state(
             "current_node_id": launch.id,
             "battery_percent": 100.0,
             "speed_mps": 0.0,
+            "ground_speed_mps": 0.0,
+            "air_speed_mps": 0.0,
+            "heading_deg": 0.0,
+            "power_watts": 0.0,
+            "flight_phase": "STANDBY",
+            "target_name": launch.name,
         }
 
     # Before mission departure
@@ -48,6 +69,12 @@ def interpolate_drone_state(
             "current_node_id": node0.id,
             "battery_percent": 100.0,
             "speed_mps": 0.0,
+            "ground_speed_mps": 0.0,
+            "air_speed_mps": 0.0,
+            "heading_deg": 0.0,
+            "power_watts": 15.0,  # Avionics standby draw
+            "flight_phase": "PRE-FLIGHT",
+            "target_name": node0.name,
         }
 
     # After mission recovery
@@ -63,6 +90,12 @@ def interpolate_drone_state(
             "current_node_id": last_node.id,
             "battery_percent": last_wp.remaining_battery_percent,
             "speed_mps": 0.0,
+            "ground_speed_mps": 0.0,
+            "air_speed_mps": 0.0,
+            "heading_deg": 0.0,
+            "power_watts": 0.0,
+            "flight_phase": "RECOVERED",
+            "target_name": last_node.name,
         }
 
     # Find active segment
@@ -75,6 +108,7 @@ def interpolate_drone_state(
         # Case 1: Hovering over target for sensor dwell
         if wp_curr.arrival_time <= t_sec <= wp_curr.departure_time:
             bat_pct = wp_curr.remaining_battery_percent  # Dwell battery
+            hdg = calculate_heading_deg(node_curr.x, node_curr.y, node_next.x, node_next.y)
             return {
                 "drone_id": drone.id,
                 "x": node_curr.x,
@@ -84,6 +118,12 @@ def interpolate_drone_state(
                 "current_node_id": node_curr.id,
                 "battery_percent": bat_pct,
                 "speed_mps": 0.0,
+                "ground_speed_mps": 0.0,
+                "air_speed_mps": wind_spd,
+                "heading_deg": hdg,
+                "power_watts": round(nominal_power * 1.15, 1),
+                "flight_phase": "HOVER_SCAN",
+                "target_name": node_curr.name,
             }
 
         # Case 2: In forward transit between wp_curr and wp_next
@@ -93,12 +133,14 @@ def interpolate_drone_state(
 
             x = node_curr.x + frac * (node_next.x - node_curr.x)
             y = node_curr.y + frac * (node_next.y - node_curr.y)
-            cruise_alt = 60.0  # Cruise altitude
+            cruise_alt = max(60.0, max(node_curr.elevation, node_next.elevation) + 25.0)
             z = cruise_alt
 
             bat_pct = wp_curr.remaining_battery_percent + frac * (
                 wp_next.remaining_battery_percent - wp_curr.remaining_battery_percent
             )
+
+            hdg = calculate_heading_deg(node_curr.x, node_curr.y, node_next.x, node_next.y)
 
             return {
                 "drone_id": drone.id,
@@ -109,6 +151,12 @@ def interpolate_drone_state(
                 "current_node_id": node_next.id,
                 "battery_percent": float(bat_pct),
                 "speed_mps": drone.cruise_speed,
+                "ground_speed_mps": drone.cruise_speed,
+                "air_speed_mps": drone.cruise_speed,
+                "heading_deg": hdg,
+                "power_watts": round(nominal_power * 0.9, 1),
+                "flight_phase": "TRANSIT_CRUISE",
+                "target_name": node_next.name,
             }
 
     # Fallback to final waypoint
@@ -122,6 +170,12 @@ def interpolate_drone_state(
         "current_node_id": last_node.id,
         "battery_percent": last_wp.remaining_battery_percent,
         "speed_mps": 0.0,
+        "ground_speed_mps": 0.0,
+        "air_speed_mps": 0.0,
+        "heading_deg": 0.0,
+        "power_watts": 0.0,
+        "flight_phase": "RECOVERED",
+        "target_name": last_node.name,
     }
 
 
@@ -144,7 +198,6 @@ def get_fleet_telemetry_at_time(
             state = interpolate_drone_state(route, t_sec, instance, drone)
             for wp in route.waypoints:
                 if wp.departure_time <= t_sec:
-                    # Target inspection completed
                     if wp.node_id not in (drone.launch_depot_id, drone.recovery_depot_id):
                         secured_targets.add(wp.node_id)
         else:
@@ -196,6 +249,7 @@ def compute_battery_curves(
                 )
                 state = interpolate_drone_state(dummy_route, t, instance, drone)
             row[f"{drone.id} SoC (%)"] = round(state["battery_percent"], 2)
+            row[f"{drone.id} Power (W)"] = round(state.get("power_watts", 0.0), 1)
         records.append(row)
 
     return pd.DataFrame(records)
