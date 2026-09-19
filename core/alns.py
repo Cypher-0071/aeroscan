@@ -32,35 +32,70 @@ def construct_greedy_seed_route(
     drone: DroneSpec,
     instance: InstanceContext,
     alpha: float = 0.2,
+    evaluator: EvaluatorContext | None = None,
 ) -> list[int]:
     """
     Constructs an initial feasible route using a Randomized Restricted Candidate List (RCL, alpha = 0.2).
     """
-    evaluator = EvaluatorContext(drone, instance)
+    if evaluator is None:
+        evaluator = EvaluatorContext(drone, instance)
+
     route: list[int] = []
     available = set(t.id for t in instance.target_nodes)
     curr_energy, curr_time, _ = evaluator.compute_route_totals(route)
 
+    energy_mat = evaluator.energy_mat
+    time_mat = evaluator.time_mat
+    idx_arr = evaluator.idx_arr
+    launch_idx = evaluator.launch_idx
+    recovery_idx = evaluator.recovery_idx
+    usable_bat = evaluator.usable_battery + 1e-4
+    max_time = evaluator.max_time + 1e-4
+    dwell_e_arr = evaluator.dwell_e_arr
+    dwell_t_arr = evaluator.dwell_t_arr
+    reward_arr = evaluator.reward_arr
+
     while available:
+        n = len(route)
+        route_indices = [
+            idx_arr[tid] if tid < len(idx_arr) else evaluator.id_to_idx.get(tid, tid)
+            for tid in route
+        ]
+        slot_p = [launch_idx if s == 0 else route_indices[s - 1] for s in range(n + 1)]
+        slot_s = [recovery_idx if s == n else route_indices[s] for s in range(n + 1)]
+        base_slot_e = [energy_mat[slot_p[s], slot_s[s]] for s in range(n + 1)]
+        base_slot_t = [time_mat[slot_p[s], slot_s[s]] for s in range(n + 1)]
+
         candidates: list[
             tuple[float, int, int, float, float]
         ] = []  # (gain_ratio, tid, slot, delta_e, delta_t)
 
-        n = len(route)
         for tid in list(available):
-            reward = evaluator.priority_scores.get(tid, 0.0)
-            for slot in range(n + 1):
-                pred_id = evaluator.launch_id if slot == 0 else route[slot - 1]
-                succ_id = evaluator.recovery_id if slot == n else route[slot]
+            c = idx_arr[tid] if tid < len(idx_arr) else evaluator.id_to_idx.get(tid, tid)
+            reward = (
+                reward_arr[tid]
+                if tid < len(reward_arr)
+                else evaluator.priority_scores.get(tid, 0.0)
+            )
+            d_e = (
+                dwell_e_arr[tid]
+                if tid < len(dwell_e_arr)
+                else evaluator.dwell_energies.get(tid, 0.0)
+            )
+            d_t = (
+                dwell_t_arr[tid] if tid < len(dwell_t_arr) else evaluator.dwell_times.get(tid, 0.0)
+            )
 
-                delta_e, delta_t = evaluator.compute_delta(pred_id, tid, succ_id)
-                new_e = curr_energy + delta_e
-                new_t = curr_time + delta_t
+            for s in range(n + 1):
+                p = slot_p[s]
+                succ = slot_s[s]
+                delta_e = energy_mat[p, c] + energy_mat[c, succ] - base_slot_e[s] + d_e
+                delta_t = time_mat[p, c] + time_mat[c, succ] - base_slot_t[s] + d_t
 
-                if new_e <= evaluator.usable_battery + 1e-4 and new_t <= evaluator.max_time + 1e-4:
+                if curr_energy + delta_e <= usable_bat and curr_time + delta_t <= max_time:
                     delta_energy = max(1.0, delta_e)
                     gain_ratio = reward / delta_energy
-                    candidates.append((gain_ratio, tid, slot, delta_e, delta_t))
+                    candidates.append((gain_ratio, tid, s, delta_e, delta_t))
 
         if not candidates:
             break
@@ -135,23 +170,38 @@ class ALNSEngine:
     ) -> list[CandidateRoute]:
         """Runs ALNS on a single drone and collects a pool of distinct feasible CandidateRoute objects."""
         start_t = time.perf_counter()
+        evaluator = EvaluatorContext(drone, self.instance)
         discovered_routes: dict[frozenset[int], CandidateRoute] = {}
         all_target_ids = [t.id for t in self.instance.target_nodes]
 
+        # Reset weights & probabilities for independent drone exploration
+        self.weights_d = np.ones(len(self.destroy_ops), dtype=np.float64)
+        self.weights_r = np.ones(len(self.repair_ops), dtype=np.float64)
+        self.probabilities_d = self.weights_d / np.sum(self.weights_d)
+        self.probabilities_r = self.weights_r / np.sum(self.weights_r)
+
         # 1. Seed construction with RCL
-        seed_targets = construct_greedy_seed_route(drone, self.instance, alpha=0.2)
-        seed_targets = run_local_search_pipeline(seed_targets, all_target_ids, drone, self.instance)
-        seed_eval = evaluate_route_trajectory(seed_targets, drone, self.instance)
+        seed_targets = construct_greedy_seed_route(
+            drone, self.instance, alpha=0.2, evaluator=evaluator
+        )
+        seed_targets = run_local_search_pipeline(
+            seed_targets, all_target_ids, drone, self.instance, evaluator=evaluator
+        )
+        seed_eval = evaluate_route_trajectory(
+            seed_targets, drone, self.instance, evaluator=evaluator
+        )
 
         if seed_eval is not None:
             discovered_routes[frozenset(seed_targets)] = seed_eval
             best_reward = seed_eval.total_reward
             current_route = list(seed_targets)
             current_reward = seed_eval.total_reward
+            current_time = seed_eval.total_flight_time
         else:
             best_reward = 0.0
             current_route = []
             current_reward = 0.0
+            current_time = 0.0
 
         num_d = len(self.destroy_ops)
         num_r = len(self.repair_ops)
@@ -184,17 +234,21 @@ class ALNSEngine:
 
             # Destroy step
             destroy_fn = self.destroy_ops[d_idx]
-            rem_route, removed = destroy_fn(current_route, q, drone, self.instance)
+            rem_route, _ = destroy_fn(current_route, q, drone, self.instance, evaluator=evaluator)
 
             # Repair step
             repair_fn = self.repair_ops[r_idx]
             unassigned = [tid for tid in all_target_ids if tid not in set(rem_route)]
-            new_route = repair_fn(rem_route, unassigned, drone, self.instance)
+            new_route = repair_fn(rem_route, unassigned, drone, self.instance, evaluator=evaluator)
 
             # Local search & immediate slack-filling
-            new_route = run_local_search_pipeline(new_route, all_target_ids, drone, self.instance)
+            new_route = run_local_search_pipeline(
+                new_route, all_target_ids, drone, self.instance, evaluator=evaluator
+            )
 
-            eval_res = evaluate_route_trajectory(new_route, drone, self.instance)
+            eval_res = evaluate_route_trajectory(
+                new_route, drone, self.instance, evaluator=evaluator
+            )
             if eval_res is not None:
                 route_key = frozenset(new_route)
                 if route_key not in discovered_routes:
@@ -209,28 +263,34 @@ class ALNSEngine:
                         discovered_routes[route_key] = eval_res
 
                 new_reward = eval_res.total_reward
-                delta = new_reward - current_reward
+                is_strictly_better = new_reward > current_reward + 1e-4 or (
+                    abs(new_reward - current_reward) <= 1e-4
+                    and eval_res.total_flight_time < current_time - 1e-3
+                )
 
-                if new_reward > best_reward:
+                if new_reward > best_reward + 1e-4:
                     scores_d[d_idx] += self.sigma1
                     scores_r[r_idx] += self.sigma1
                     best_reward = new_reward
                     current_route = list(new_route)
                     current_reward = new_reward
-                elif delta >= 0:
+                    current_time = eval_res.total_flight_time
+                elif is_strictly_better:
                     scores_d[d_idx] += self.sigma2
                     scores_r[r_idx] += self.sigma2
                     current_route = list(new_route)
                     current_reward = new_reward
+                    current_time = eval_res.total_flight_time
                 else:
-                    # Simulated Annealing acceptance criterion: P(accept) = exp(-Delta / T)
-                    loss = current_reward - new_reward
+                    # Non-improving route under Simulated Annealing acceptance criterion: P(accept) = exp(-Delta / T)
+                    loss = max(0.0, current_reward - new_reward)
                     accept_prob = math.exp(-loss / max(temp, 1e-4))
                     if random.random() < accept_prob:
                         scores_d[d_idx] += self.sigma3
                         scores_r[r_idx] += self.sigma3
                         current_route = list(new_route)
                         current_reward = new_reward
+                        current_time = eval_res.total_flight_time
 
             temp = max(1e-2, temp * self.cooling_rate)
 
@@ -257,7 +317,7 @@ class ALNSEngine:
                 counts_r.fill(0)
 
         # Always include an empty (depot loitering) route as a valid candidate
-        empty_route = evaluate_route_trajectory([], drone, self.instance)
+        empty_route = evaluate_route_trajectory([], drone, self.instance, evaluator=evaluator)
         if empty_route is not None and frozenset() not in discovered_routes:
             discovered_routes[frozenset()] = empty_route
 

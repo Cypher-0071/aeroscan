@@ -183,3 +183,68 @@ def test_repair_operators(mock_inst):
 def test_repair_operators_preserve_battery_reserve(mock_inst):
     """Backward compatible alias for test_repair_operators."""
     test_repair_operators(mock_inst)
+
+
+def test_asymmetric_depots_operator_evaluation(mock_inst):
+    """Verify trajectory evaluation when launch depot != recovery depot."""
+    asym_drone = DroneSpec(
+        id="Asym-01",
+        battery_joules=360000.0,
+        safety_reserve_ratio=0.15,
+        max_flight_time=2400.0,
+        cruise_speed=14.5,
+        launch_depot_id=0,
+        recovery_depot_id=1,  # Different recovery node
+    )
+    targets = [2, 3, 4]
+    route = evaluate_route_trajectory(targets, asym_drone, mock_inst)
+    assert route is not None
+    assert route.waypoints[0].node_id == 0
+    assert route.waypoints[-1].node_id == 1
+    # Check that recovery depot does not add inspection dwell time
+    node_rec = mock_inst.get_node(1)
+    assert node_rec is not None and node_rec.dwell_time > 0.0
+    last_wp = route.waypoints[-1]
+    assert last_wp.departure_time == last_wp.arrival_time  # 0 dwell at recovery
+
+
+def test_evaluator_context_cache_integrity(mock_inst):
+    """Verify EvaluatorContext fast vector caches match original instance properties."""
+    from core.operators import EvaluatorContext
+
+    drone = mock_inst.drones[0]
+    ctx = EvaluatorContext(drone, mock_inst)
+
+    assert ctx.launch_id == drone.launch_depot_id
+    assert ctx.recovery_id == drone.recovery_depot_id
+    assert ctx.max_d > 0.0
+    assert ctx.max_score > 0.0
+
+    for n in mock_inst.targets:
+        assert ctx.idx_arr[n.id] == ctx.id_to_idx[n.id]
+        assert abs(ctx.dwell_e_arr[n.id] - ctx.dwell_energies[n.id]) < 1e-6
+        assert abs(ctx.dwell_t_arr[n.id] - n.dwell_time) < 1e-6
+        assert abs(ctx.reward_arr[n.id] - n.priority_score) < 1e-6
+
+
+def test_evaluator_context_compute_delta_matches_route_totals(mock_inst):
+    """Verify that compute_delta produces exact route energy and time transitions."""
+    from core.operators import EvaluatorContext
+
+    drone = mock_inst.drones[0]
+    ctx = EvaluatorContext(drone, mock_inst)
+
+    route = [1, 2, 3]
+    base_e, base_t, _ = ctx.compute_route_totals(route)
+
+    cand = 4
+    # Insert candidate at slot 1 (between 1 and 2)
+    pred_id = route[0]
+    succ_id = route[1]
+    de, dt = ctx.compute_delta(pred_id, cand, succ_id)
+
+    new_route = [1, 4, 2, 3]
+    new_e, new_t, _ = ctx.compute_route_totals(new_route)
+
+    assert abs((base_e + de) - new_e) < 1e-5
+    assert abs((base_t + dt) - new_t) < 1e-5

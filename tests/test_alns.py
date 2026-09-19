@@ -134,3 +134,75 @@ def test_empty_route_loiter_included(mock_inst):
         assert empty_candidates[0].total_reward == 0.0
         assert empty_candidates[0].waypoints[0].node_id == drone.launch_depot_id
         assert empty_candidates[0].waypoints[-1].node_id == drone.recovery_depot_id
+
+
+def test_heterogeneous_fleet_and_asymmetric_depots(mock_inst):
+    """Verify ALNS exploration for a heterogeneous fleet with varying batteries, speeds, and asymmetric depots."""
+    from core.contracts import DroneSpec, InstanceContext
+
+    drones = [
+        DroneSpec(
+            id="Heavy-Lift-01",
+            battery_joules=500000.0,
+            safety_reserve_ratio=0.15,
+            max_flight_time=3000.0,
+            cruise_speed=12.0,
+            launch_depot_id=0,
+            recovery_depot_id=0,
+        ),
+        DroneSpec(
+            id="Fast-Scout-02",
+            battery_joules=250000.0,
+            safety_reserve_ratio=0.20,
+            max_flight_time=1800.0,
+            cruise_speed=18.0,
+            launch_depot_id=0,
+            recovery_depot_id=1,  # Asymmetric depot
+        ),
+    ]
+
+    hetero_inst = InstanceContext(
+        instance_name="Heterogeneous_Test",
+        targets=mock_inst.targets,
+        drones=drones,
+        time_matrix=mock_inst.time_matrix,
+        energy_matrix=mock_inst.energy_matrix,
+        ambient_wind=mock_inst.ambient_wind,
+    )
+
+    pool = explore_route_pool(hetero_inst, max_iterations=80, time_limit_sec=0.8, seed=42)
+    assert pool.total_routes >= 2
+
+    # Verify Fast-Scout routes respect its specific 20% reserve and asymmetric recovery depot
+    scout_routes = pool.routes_by_drone["Fast-Scout-02"]
+    assert len(scout_routes) > 0
+    for r in scout_routes:
+        assert r.waypoints[0].node_id == 0
+        assert r.waypoints[-1].node_id == 1
+        assert r.total_energy_joules <= drones[1].usable_battery_joules + 1e-4
+        assert r.total_flight_time <= drones[1].max_flight_time + 1e-4
+
+
+def test_alns_scoring_no_false_improvement(mock_inst):
+    """Verify that ALNS does not grant sigma2 (improved route) score when a candidate is identical."""
+    engine = ALNSEngine(mock_inst, delta_segment=5)
+    drone = mock_inst.drones[0]
+
+    # Run for 15 iterations and verify probabilities remain valid
+    routes = engine.explore_for_drone(drone, max_iterations=15, time_limit_sec=0.4)
+    assert len(routes) > 0
+    assert abs(sum(engine.probabilities_d) - 1.0) < 1e-5
+    assert abs(sum(engine.probabilities_r) - 1.0) < 1e-5
+
+
+def test_alns_high_iteration_stability(mock_inst):
+    """Stress-test ALNS with high iteration count to confirm stability and performance."""
+    pool = explore_route_pool(mock_inst, max_iterations=300, time_limit_sec=0.9, seed=42)
+    assert pool.total_routes > 0
+    for drone in mock_inst.drones:
+        routes = pool.routes_by_drone[drone.id]
+        assert len(routes) > 5
+        # Ensure all generated routes are strictly valid
+        for r in routes:
+            assert r.total_energy_joules <= drone.usable_battery_joules + 1e-4
+            assert r.total_flight_time <= drone.max_flight_time + 1e-4

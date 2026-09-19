@@ -34,6 +34,7 @@ class EvaluatorContext:
         self.usable_battery = drone.usable_battery_joules
         self.max_time = drone.max_flight_time
 
+        self.node_map = {n.id: n for n in instance.targets}
         self.dwell_times = {n.id: n.dwell_time for n in instance.targets}
         self.dwell_energies = {
             n.id: compute_dwell_energy(n.dwell_time) if n.dwell_time > 0 else 0.0
@@ -41,26 +42,76 @@ class EvaluatorContext:
         }
         self.priority_scores = {n.id: n.priority_score for n in instance.targets}
 
+        # Flat array caches for direct O(1) indexing (zero dict hashing in inner loops)
+        max_id = max((n.id for n in instance.targets), default=0)
+        max_idx = max(self.id_to_idx.values(), default=0)
+        size = max(max_id, max_idx) + 1
+
+        self.idx_arr = np.zeros(size, dtype=np.int32)
+        self.dwell_e_arr = np.zeros(size, dtype=np.float64)
+        self.dwell_t_arr = np.zeros(size, dtype=np.float64)
+        self.reward_arr = np.zeros(size, dtype=np.float64)
+
+        for n in instance.targets:
+            nid = n.id
+            idx = self.id_to_idx.get(nid, nid)
+            self.idx_arr[nid] = idx
+            self.dwell_e_arr[nid] = self.dwell_energies[nid]
+            self.dwell_t_arr[nid] = self.dwell_times[nid]
+            self.reward_arr[nid] = self.priority_scores[nid]
+
+        # Normalization constants for Shaw relatedness operator
+        coords = np.array([[n.x, n.y] for n in instance.targets], dtype=np.float64)
+        if len(coords) > 1:
+            diffs = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
+            self.max_d = max(float(np.max(np.sqrt(np.sum(diffs**2, axis=-1)))), 1.0)
+        else:
+            self.max_d = 1.0
+
+        self.max_score = max(
+            (n.priority_score for n in instance.targets if n.priority_score > 0), default=1.0
+        )
+
     def compute_delta(self, pred_id: int, cand_id: int, succ_id: int) -> tuple[float, float]:
         """
         Computes (delta_energy, delta_time) for inserting cand_id between pred_id and succ_id.
         O(1) execution with zero allocations.
         """
-        p = self.id_to_idx.get(pred_id, pred_id)
-        c = self.id_to_idx.get(cand_id, cand_id)
-        s = self.id_to_idx.get(succ_id, succ_id)
+        p = (
+            self.idx_arr[pred_id]
+            if pred_id < len(self.idx_arr)
+            else self.id_to_idx.get(pred_id, pred_id)
+        )
+        c = (
+            self.idx_arr[cand_id]
+            if cand_id < len(self.idx_arr)
+            else self.id_to_idx.get(cand_id, cand_id)
+        )
+        s = (
+            self.idx_arr[succ_id]
+            if succ_id < len(self.idx_arr)
+            else self.id_to_idx.get(succ_id, succ_id)
+        )
 
         delta_energy = float(
             self.energy_mat[p, c]
             + self.energy_mat[c, s]
             - self.energy_mat[p, s]
-            + self.dwell_energies.get(cand_id, 0.0)
+            + (
+                self.dwell_e_arr[cand_id]
+                if cand_id < len(self.dwell_e_arr)
+                else self.dwell_energies.get(cand_id, 0.0)
+            )
         )
         delta_time = float(
             self.time_mat[p, c]
             + self.time_mat[c, s]
             - self.time_mat[p, s]
-            + self.dwell_times.get(cand_id, 0.0)
+            + (
+                self.dwell_t_arr[cand_id]
+                if cand_id < len(self.dwell_t_arr)
+                else self.dwell_times.get(cand_id, 0.0)
+            )
         )
         return delta_energy, delta_time
 
@@ -74,31 +125,42 @@ class EvaluatorContext:
             e = float(self.energy_mat[self.launch_idx, self.recovery_idx])
             return e, t, 0.0
 
+        seq_indices = (
+            [self.launch_idx]
+            + [
+                self.idx_arr[tid] if tid < len(self.idx_arr) else self.id_to_idx[tid]
+                for tid in route
+            ]
+            + [self.recovery_idx]
+        )
         total_energy = 0.0
         total_time = 0.0
         total_reward = 0.0
 
-        seq_indices = (
-            [self.launch_idx] + [self.id_to_idx[tid] for tid in route] + [self.recovery_idx]
-        )
         for i in range(len(seq_indices) - 1):
             u = seq_indices[i]
             v = seq_indices[i + 1]
-            total_energy += float(self.energy_mat[u, v])
-            total_time += float(self.time_mat[u, v])
+            total_energy += self.energy_mat[u, v]
+            total_time += self.time_mat[u, v]
 
         for tid in route:
-            total_energy += self.dwell_energies.get(tid, 0.0)
-            total_time += self.dwell_times.get(tid, 0.0)
-            total_reward += self.priority_scores.get(tid, 0.0)
+            if tid < len(self.dwell_e_arr):
+                total_energy += self.dwell_e_arr[tid]
+                total_time += self.dwell_t_arr[tid]
+                total_reward += self.reward_arr[tid]
+            else:
+                total_energy += self.dwell_energies.get(tid, 0.0)
+                total_time += self.dwell_times.get(tid, 0.0)
+                total_reward += self.priority_scores.get(tid, 0.0)
 
-        return total_energy, total_time, total_reward
+        return float(total_energy), float(total_time), float(total_reward)
 
 
 def evaluate_route_trajectory(
     target_ids: list[int],
     drone: DroneSpec,
     instance: InstanceContext,
+    evaluator: EvaluatorContext | None = None,
 ) -> CandidateRoute | None:
     """
     Evaluates a candidate target sequence for a drone from launch to recovery depot.
@@ -109,12 +171,21 @@ def evaluate_route_trajectory(
     if len(target_ids) != len(set(target_ids)):
         return None
 
-    node_map = {n.id: n for n in instance.targets}
+    if evaluator is None:
+        evaluator = EvaluatorContext(drone, instance)
+
+    node_map = evaluator.node_map
     launch_id = drone.launch_depot_id
     recovery_id = drone.recovery_depot_id
 
     # Complete sequence of node IDs: launch -> targets -> recovery
     full_sequence = [launch_id] + list(target_ids) + [recovery_id]
+    seq_indices = [
+        evaluator.idx_arr[nid]
+        if nid < len(evaluator.idx_arr)
+        else evaluator.id_to_idx.get(nid, nid)
+        for nid in full_sequence
+    ]
 
     current_time = 0.0
     current_energy = 0.0
@@ -133,28 +204,34 @@ def evaluate_route_trajectory(
     )
 
     for idx in range(len(full_sequence) - 1):
-        from_id = full_sequence[idx]
+        u = seq_indices[idx]
+        v = seq_indices[idx + 1]
         to_id = full_sequence[idx + 1]
 
-        # Transit time and energy from precomputed matrices (node ID safe)
-        transit_time = instance.get_transit_time(from_id, to_id)
-        transit_energy = instance.get_transit_energy(from_id, to_id)
+        transit_time = float(evaluator.time_mat[u, v])
+        transit_energy = float(evaluator.energy_mat[u, v])
 
         arr_time = current_time + transit_time
-        target_node = node_map.get(to_id)
-        dwell_time = target_node.dwell_time if (target_node and to_id != recovery_id) else 0.0
-        dwell_energy = (
-            compute_dwell_energy(dwell_time) if (dwell_time > 0 and to_id != recovery_id) else 0.0
-        )
+        if to_id != recovery_id:
+            if to_id < len(evaluator.dwell_t_arr):
+                dwell_time = float(evaluator.dwell_t_arr[to_id])
+                dwell_energy = float(evaluator.dwell_e_arr[to_id])
+                total_reward += float(evaluator.reward_arr[to_id])
+            else:
+                tn = node_map.get(to_id)
+                dwell_time = tn.dwell_time if tn else 0.0
+                dwell_energy = compute_dwell_energy(dwell_time) if dwell_time > 0 else 0.0
+                if tn:
+                    total_reward += tn.priority_score
+        else:
+            dwell_time = 0.0
+            dwell_energy = 0.0
 
         dep_time = arr_time + dwell_time
         node_energy = current_energy + transit_energy + dwell_energy
 
         current_time = dep_time
         current_energy = node_energy
-
-        if to_id != recovery_id and target_node:
-            total_reward += target_node.priority_score
 
         remaining_battery_joules = max(0.0, drone.battery_joules - current_energy)
         rem_pct = (remaining_battery_joules / drone.battery_joules) * 100.0
@@ -200,6 +277,7 @@ def destroy_shaw_relatedness(
     phi2: float = 0.3,
     phi3: float = 0.2,
     p_determinism: float = 3.0,
+    evaluator: EvaluatorContext | None = None,
 ) -> tuple[list[int], list[int]]:
     """
     Shaw Spatio-Temporal Relatedness Destroy.
@@ -211,32 +289,33 @@ def destroy_shaw_relatedness(
     if len(target_ids) <= q:
         return [], list(target_ids)
 
-    node_map = {n.id: n for n in instance.targets}
+    if evaluator is None:
+        evaluator = EvaluatorContext(drone, instance)
+
+    node_map = evaluator.node_map
 
     # Precalculate exact arrival times along current route sequence
     arr_times: dict[int, float] = {}
     curr_t = 0.0
-    prev_id = drone.launch_depot_id
+    prev_idx = evaluator.launch_idx
     for tid in target_ids:
-        curr_t += instance.get_transit_time(prev_id, tid)
+        tid_idx = (
+            evaluator.idx_arr[tid]
+            if tid < len(evaluator.idx_arr)
+            else evaluator.id_to_idx.get(tid, tid)
+        )
+        curr_t += float(evaluator.time_mat[prev_idx, tid_idx])
         arr_times[tid] = curr_t
-        node = node_map.get(tid)
-        if node:
-            curr_t += node.dwell_time
-        prev_id = tid
+        curr_t += float(
+            evaluator.dwell_t_arr[tid]
+            if tid < len(evaluator.dwell_t_arr)
+            else evaluator.dwell_times.get(tid, 0.0)
+        )
+        prev_idx = tid_idx
 
-    # Maximum distance, flight time, and score normalizers
-    coords = np.array([[n.x, n.y] for n in instance.targets], dtype=np.float64)
-    if len(coords) > 1:
-        diffs = coords[:, np.newaxis, :] - coords[np.newaxis, :, :]
-        max_d = max(float(np.max(np.sqrt(np.sum(diffs**2, axis=-1)))), 1.0)
-    else:
-        max_d = 1.0
-
+    max_d = evaluator.max_d
     max_t = max(drone.max_flight_time, curr_t, 1.0)
-    max_score = max(
-        (n.priority_score for n in instance.targets if n.priority_score > 0), default=1.0
-    )
+    max_score = evaluator.max_score
 
     # Initial seed target selected uniformly at random
     seed_idx = random.randrange(len(target_ids))
@@ -282,6 +361,7 @@ def destroy_worst_cost_efficiency(
     drone: DroneSpec,
     instance: InstanceContext,
     p_determinism: float = 3.0,
+    evaluator: EvaluatorContext | None = None,
 ) -> tuple[list[int], list[int]]:
     """
     Worst-Cost Efficiency Detour Destroy.
@@ -294,21 +374,38 @@ def destroy_worst_cost_efficiency(
     if len(target_ids) <= q:
         return [], list(target_ids)
 
-    node_map = {n.id: n for n in instance.targets}
+    if evaluator is None:
+        evaluator = EvaluatorContext(drone, instance)
+
     full_seq = [drone.launch_depot_id] + target_ids + [drone.recovery_depot_id]
+    seq_idx = [
+        evaluator.idx_arr[nid]
+        if nid < len(evaluator.idx_arr)
+        else evaluator.id_to_idx.get(nid, nid)
+        for nid in full_seq
+    ]
 
     efficiency_list: list[tuple[float, int]] = []
     for i, tid in enumerate(target_ids):
-        pred = full_seq[i]
-        succ = full_seq[i + 2]
-        dwell_e = compute_dwell_energy(node_map[tid].dwell_time) if tid in node_map else 0.0
+        p = seq_idx[i]
+        c = seq_idx[i + 1]
+        s = seq_idx[i + 2]
+        dwell_e = (
+            evaluator.dwell_e_arr[tid]
+            if tid < len(evaluator.dwell_e_arr)
+            else evaluator.dwell_energies.get(tid, 0.0)
+        )
         delta_energy = (
-            instance.get_transit_energy(pred, tid)
-            + instance.get_transit_energy(tid, succ)
-            - instance.get_transit_energy(pred, succ)
+            evaluator.energy_mat[p, c]
+            + evaluator.energy_mat[c, s]
+            - evaluator.energy_mat[p, s]
             + dwell_e
         )
-        reward = node_map[tid].priority_score if tid in node_map else 0.0
+        reward = (
+            evaluator.reward_arr[tid]
+            if tid < len(evaluator.reward_arr)
+            else evaluator.priority_scores.get(tid, 0.0)
+        )
         eta = reward / max(delta_energy, 1e-3)
         efficiency_list.append((eta, tid))
 
@@ -331,6 +428,7 @@ def destroy_radial_cone(
     q: int,
     drone: DroneSpec,
     instance: InstanceContext,
+    evaluator: EvaluatorContext | None = None,
 ) -> tuple[list[int], list[int]]:
     """
     Radial Angular Cone Destroy.
@@ -342,10 +440,11 @@ def destroy_radial_cone(
     if len(target_ids) <= q:
         return [], list(target_ids)
 
-    depot = next(
-        (n for n in instance.targets if n.id == drone.launch_depot_id), instance.targets[0]
-    )
-    node_map = {n.id: n for n in instance.targets}
+    if evaluator is None:
+        evaluator = EvaluatorContext(drone, instance)
+
+    node_map = evaluator.node_map
+    depot = node_map.get(drone.launch_depot_id, instance.targets[0])
 
     angles: list[tuple[float, int]] = []
     for tid in target_ids:
@@ -374,6 +473,7 @@ def destroy_contiguous_string(
     q: int,
     drone: DroneSpec,
     instance: InstanceContext,
+    evaluator: EvaluatorContext | None = None,
 ) -> tuple[list[int], list[int]]:
     """
     Contiguous String Destroy.
@@ -402,52 +502,93 @@ def repair_greedy_insertion(
     unassigned_pool: list[int],
     drone: DroneSpec,
     instance: InstanceContext,
+    evaluator: EvaluatorContext | None = None,
 ) -> list[int]:
     """
     Greedy Insertion: Evaluates every unassigned target across every insertion slot (i, i+1),
     greedily inserting the target yielding maximum Delta R / Delta Energy without violating
     battery reserve or flight deadline.
     """
-    evaluator = EvaluatorContext(drone, instance)
+    if evaluator is None:
+        evaluator = EvaluatorContext(drone, instance)
+
     route = list(current_route)
     pool = set(unassigned_pool) - set(route)
     if not pool:
         return route
 
+    energy_mat = evaluator.energy_mat
+    time_mat = evaluator.time_mat
+    idx_arr = evaluator.idx_arr
+    launch_idx = evaluator.launch_idx
+    recovery_idx = evaluator.recovery_idx
+    usable_bat = evaluator.usable_battery + 1e-4
+    max_time = evaluator.max_time + 1e-4
+    dwell_e_arr = evaluator.dwell_e_arr
+    dwell_t_arr = evaluator.dwell_t_arr
+    reward_arr = evaluator.reward_arr
+
     curr_energy, curr_time, _ = evaluator.compute_route_totals(route)
 
     while pool:
-        best_candidate: int | None = None
+        n = len(route)
+        route_indices = [
+            idx_arr[tid] if tid < len(idx_arr) else evaluator.id_to_idx.get(tid, tid)
+            for tid in route
+        ]
+        slot_p = [launch_idx if s == 0 else route_indices[s - 1] for s in range(n + 1)]
+        slot_s = [recovery_idx if s == n else route_indices[s] for s in range(n + 1)]
+        base_slot_e = [energy_mat[slot_p[s], slot_s[s]] for s in range(n + 1)]
+        base_slot_t = [time_mat[slot_p[s], slot_s[s]] for s in range(n + 1)]
+
+        best_cand: int | None = None
         best_slot: int = -1
         best_ratio: float = -1.0
-        best_delta_e: float = 0.0
-        best_delta_t: float = 0.0
+        best_de: float = 0.0
+        best_dt: float = 0.0
 
-        n = len(route)
-        for cand_id in list(pool):
-            reward = evaluator.priority_scores.get(cand_id, 0.0)
-            for slot in range(n + 1):
-                pred_id = evaluator.launch_id if slot == 0 else route[slot - 1]
-                succ_id = evaluator.recovery_id if slot == n else route[slot]
+        for cand_id in pool:
+            c = (
+                idx_arr[cand_id]
+                if cand_id < len(idx_arr)
+                else evaluator.id_to_idx.get(cand_id, cand_id)
+            )
+            reward = (
+                reward_arr[cand_id]
+                if cand_id < len(reward_arr)
+                else evaluator.priority_scores.get(cand_id, 0.0)
+            )
+            d_e = (
+                dwell_e_arr[cand_id]
+                if cand_id < len(dwell_e_arr)
+                else evaluator.dwell_energies.get(cand_id, 0.0)
+            )
+            d_t = (
+                dwell_t_arr[cand_id]
+                if cand_id < len(dwell_t_arr)
+                else evaluator.dwell_times.get(cand_id, 0.0)
+            )
 
-                delta_e, delta_t = evaluator.compute_delta(pred_id, cand_id, succ_id)
-                new_e = curr_energy + delta_e
-                new_t = curr_time + delta_t
+            for s in range(n + 1):
+                p = slot_p[s]
+                succ = slot_s[s]
+                delta_e = energy_mat[p, c] + energy_mat[c, succ] - base_slot_e[s] + d_e
+                delta_t = time_mat[p, c] + time_mat[c, succ] - base_slot_t[s] + d_t
 
-                if new_e <= evaluator.usable_battery + 1e-4 and new_t <= evaluator.max_time + 1e-4:
+                if curr_energy + delta_e <= usable_bat and curr_time + delta_t <= max_time:
                     ratio = reward / max(delta_e, 1.0)
                     if ratio > best_ratio:
                         best_ratio = ratio
-                        best_candidate = cand_id
-                        best_slot = slot
-                        best_delta_e = delta_e
-                        best_delta_t = delta_t
+                        best_cand = cand_id
+                        best_slot = s
+                        best_de = delta_e
+                        best_dt = delta_t
 
-        if best_candidate is not None:
-            route.insert(best_slot, best_candidate)
-            curr_energy += best_delta_e
-            curr_time += best_delta_t
-            pool.remove(best_candidate)
+        if best_cand is not None:
+            route.insert(best_slot, best_cand)
+            curr_energy += best_de
+            curr_time += best_dt
+            pool.remove(best_cand)
         else:
             break
 
@@ -460,63 +601,114 @@ def repair_regret2_insertion(
     drone: DroneSpec,
     instance: InstanceContext,
     big_m: float = 1e6,
+    evaluator: EvaluatorContext | None = None,
 ) -> list[int]:
     """
     Regret-2 Insertion: Computes difference between best insertion cost c1(u) and
     second-best insertion cost c2(u). Target with highest regret is inserted first.
     """
-    evaluator = EvaluatorContext(drone, instance)
+    if evaluator is None:
+        evaluator = EvaluatorContext(drone, instance)
+
     route = list(current_route)
     pool = set(unassigned_pool) - set(route)
     if not pool:
         return route
 
+    energy_mat = evaluator.energy_mat
+    time_mat = evaluator.time_mat
+    idx_arr = evaluator.idx_arr
+    launch_idx = evaluator.launch_idx
+    recovery_idx = evaluator.recovery_idx
+    usable_bat = evaluator.usable_battery + 1e-4
+    max_time = evaluator.max_time + 1e-4
+    dwell_e_arr = evaluator.dwell_e_arr
+    dwell_t_arr = evaluator.dwell_t_arr
+    reward_arr = evaluator.reward_arr
+
     curr_energy, curr_time, _ = evaluator.compute_route_totals(route)
 
     while pool:
-        max_regret = -1.0
-        chosen_candidate: int | None = None
-        chosen_slot: int = -1
-        chosen_delta_e: float = 0.0
-        chosen_delta_t: float = 0.0
-
         n = len(route)
-        for cand_id in list(pool):
-            reward = evaluator.priority_scores.get(cand_id, 0.0)
-            costs: list[tuple[float, int, float, float]] = []  # (cost, slot, delta_e, delta_t)
+        route_indices = [
+            idx_arr[tid] if tid < len(idx_arr) else evaluator.id_to_idx.get(tid, tid)
+            for tid in route
+        ]
+        slot_p = [launch_idx if s == 0 else route_indices[s - 1] for s in range(n + 1)]
+        slot_s = [recovery_idx if s == n else route_indices[s] for s in range(n + 1)]
+        base_slot_e = [energy_mat[slot_p[s], slot_s[s]] for s in range(n + 1)]
+        base_slot_t = [time_mat[slot_p[s], slot_s[s]] for s in range(n + 1)]
 
-            for slot in range(n + 1):
-                pred_id = evaluator.launch_id if slot == 0 else route[slot - 1]
-                succ_id = evaluator.recovery_id if slot == n else route[slot]
+        max_regret = -1.0
+        chosen_cand: int | None = None
+        chosen_slot: int = -1
+        chosen_de: float = 0.0
+        chosen_dt: float = 0.0
 
-                delta_e, delta_t = evaluator.compute_delta(pred_id, cand_id, succ_id)
-                new_e = curr_energy + delta_e
-                new_t = curr_time + delta_t
+        for cand_id in pool:
+            c = (
+                idx_arr[cand_id]
+                if cand_id < len(idx_arr)
+                else evaluator.id_to_idx.get(cand_id, cand_id)
+            )
+            reward = (
+                reward_arr[cand_id]
+                if cand_id < len(reward_arr)
+                else evaluator.priority_scores.get(cand_id, 0.0)
+            )
+            inv_reward = 1.0 / max(reward, 1.0)
+            d_e = (
+                dwell_e_arr[cand_id]
+                if cand_id < len(dwell_e_arr)
+                else evaluator.dwell_energies.get(cand_id, 0.0)
+            )
+            d_t = (
+                dwell_t_arr[cand_id]
+                if cand_id < len(dwell_t_arr)
+                else evaluator.dwell_times.get(cand_id, 0.0)
+            )
 
-                if new_e <= evaluator.usable_battery + 1e-4 and new_t <= evaluator.max_time + 1e-4:
-                    cost = delta_e / max(reward, 1.0)
-                    costs.append((cost, slot, delta_e, delta_t))
+            c1 = float("inf")
+            c2 = float("inf")
+            s1 = -1
+            de1 = 0.0
+            dt1 = 0.0
 
-            if not costs:
+            for s in range(n + 1):
+                p = slot_p[s]
+                succ = slot_s[s]
+                delta_e = energy_mat[p, c] + energy_mat[c, succ] - base_slot_e[s] + d_e
+                delta_t = time_mat[p, c] + time_mat[c, succ] - base_slot_t[s] + d_t
+
+                if curr_energy + delta_e <= usable_bat and curr_time + delta_t <= max_time:
+                    cost = delta_e * inv_reward
+                    if cost < c1:
+                        c2 = c1
+                        c1 = cost
+                        s1 = s
+                        de1 = delta_e
+                        dt1 = delta_t
+                    elif cost < c2:
+                        c2 = cost
+
+            if s1 == -1:
                 continue
 
-            costs.sort(key=lambda x: x[0])
-            c1, s1, de1, dt1 = costs[0]
-            c2 = costs[1][0] if len(costs) > 1 else c1 + big_m
-            regret = c2 - c1
+            c2_pen = c2 if c2 != float("inf") else c1 + big_m
+            regret = c2_pen - c1
 
             if regret > max_regret:
                 max_regret = regret
-                chosen_candidate = cand_id
+                chosen_cand = cand_id
                 chosen_slot = s1
-                chosen_delta_e = de1
-                chosen_delta_t = dt1
+                chosen_de = de1
+                chosen_dt = dt1
 
-        if chosen_candidate is not None:
-            route.insert(chosen_slot, chosen_candidate)
-            curr_energy += chosen_delta_e
-            curr_time += chosen_delta_t
-            pool.remove(chosen_candidate)
+        if chosen_cand is not None:
+            route.insert(chosen_slot, chosen_cand)
+            curr_energy += chosen_de
+            curr_time += chosen_dt
+            pool.remove(chosen_cand)
         else:
             break
 
@@ -529,6 +721,7 @@ def repair_big_m_regret3_insertion(
     drone: DroneSpec,
     instance: InstanceContext,
     big_m: float = 1e6,
+    evaluator: EvaluatorContext | None = None,
 ) -> list[int]:
     """
     Corrected Big-M Regret-3 Insertion.
@@ -536,59 +729,114 @@ def repair_big_m_regret3_insertion(
     Regret_3(u) = sum_{r=2}^3 (c_r(u) - c_1(u))
     Guarantees time-critical targets nearing deadline expiration are scheduled before slots close.
     """
-    evaluator = EvaluatorContext(drone, instance)
+    if evaluator is None:
+        evaluator = EvaluatorContext(drone, instance)
+
     route = list(current_route)
     pool = set(unassigned_pool) - set(route)
     if not pool:
         return route
 
+    energy_mat = evaluator.energy_mat
+    time_mat = evaluator.time_mat
+    idx_arr = evaluator.idx_arr
+    launch_idx = evaluator.launch_idx
+    recovery_idx = evaluator.recovery_idx
+    usable_bat = evaluator.usable_battery + 1e-4
+    max_time = evaluator.max_time + 1e-4
+    dwell_e_arr = evaluator.dwell_e_arr
+    dwell_t_arr = evaluator.dwell_t_arr
+    reward_arr = evaluator.reward_arr
+
     curr_energy, curr_time, _ = evaluator.compute_route_totals(route)
 
     while pool:
-        max_regret = -1.0
-        chosen_candidate: int | None = None
-        chosen_slot: int = -1
-        chosen_delta_e: float = 0.0
-        chosen_delta_t: float = 0.0
-
         n = len(route)
-        for cand_id in list(pool):
-            reward = evaluator.priority_scores.get(cand_id, 0.0)
-            costs: list[tuple[float, int, float, float]] = []
+        route_indices = [
+            idx_arr[tid] if tid < len(idx_arr) else evaluator.id_to_idx.get(tid, tid)
+            for tid in route
+        ]
+        slot_p = [launch_idx if s == 0 else route_indices[s - 1] for s in range(n + 1)]
+        slot_s = [recovery_idx if s == n else route_indices[s] for s in range(n + 1)]
+        base_slot_e = [energy_mat[slot_p[s], slot_s[s]] for s in range(n + 1)]
+        base_slot_t = [time_mat[slot_p[s], slot_s[s]] for s in range(n + 1)]
 
-            for slot in range(n + 1):
-                pred_id = evaluator.launch_id if slot == 0 else route[slot - 1]
-                succ_id = evaluator.recovery_id if slot == n else route[slot]
+        max_regret = -1.0
+        chosen_cand: int | None = None
+        chosen_slot: int = -1
+        chosen_de: float = 0.0
+        chosen_dt: float = 0.0
 
-                delta_e, delta_t = evaluator.compute_delta(pred_id, cand_id, succ_id)
-                new_e = curr_energy + delta_e
-                new_t = curr_time + delta_t
+        for cand_id in pool:
+            c = (
+                idx_arr[cand_id]
+                if cand_id < len(idx_arr)
+                else evaluator.id_to_idx.get(cand_id, cand_id)
+            )
+            reward = (
+                reward_arr[cand_id]
+                if cand_id < len(reward_arr)
+                else evaluator.priority_scores.get(cand_id, 0.0)
+            )
+            inv_reward = 1.0 / max(reward, 1.0)
+            d_e = (
+                dwell_e_arr[cand_id]
+                if cand_id < len(dwell_e_arr)
+                else evaluator.dwell_energies.get(cand_id, 0.0)
+            )
+            d_t = (
+                dwell_t_arr[cand_id]
+                if cand_id < len(dwell_t_arr)
+                else evaluator.dwell_times.get(cand_id, 0.0)
+            )
 
-                if new_e <= evaluator.usable_battery + 1e-4 and new_t <= evaluator.max_time + 1e-4:
-                    cost = delta_e / max(reward, 1.0)
-                    costs.append((cost, slot, delta_e, delta_t))
+            c1 = float("inf")
+            c2 = float("inf")
+            c3 = float("inf")
+            s1 = -1
+            de1 = 0.0
+            dt1 = 0.0
 
-            if not costs:
+            for s in range(n + 1):
+                p = slot_p[s]
+                succ = slot_s[s]
+                delta_e = energy_mat[p, c] + energy_mat[c, succ] - base_slot_e[s] + d_e
+                delta_t = time_mat[p, c] + time_mat[c, succ] - base_slot_t[s] + d_t
+
+                if curr_energy + delta_e <= usable_bat and curr_time + delta_t <= max_time:
+                    cost = delta_e * inv_reward
+                    if cost < c1:
+                        c3 = c2
+                        c2 = c1
+                        c1 = cost
+                        s1 = s
+                        de1 = delta_e
+                        dt1 = delta_t
+                    elif cost < c2:
+                        c3 = c2
+                        c2 = cost
+                    elif cost < c3:
+                        c3 = cost
+
+            if s1 == -1:
                 continue
 
-            costs.sort(key=lambda x: x[0])
-            c1, s1, de1, dt1 = costs[0]
-            c2 = costs[1][0] if len(costs) > 1 else c1 + big_m
-            c3 = costs[2][0] if len(costs) > 2 else c1 + big_m
-            regret3 = (c2 - c1) + (c3 - c1)
+            c2_pen = c2 if c2 != float("inf") else c1 + big_m
+            c3_pen = c3 if c3 != float("inf") else c1 + big_m
+            regret3 = (c2_pen - c1) + (c3_pen - c1)
 
             if regret3 > max_regret:
                 max_regret = regret3
-                chosen_candidate = cand_id
+                chosen_cand = cand_id
                 chosen_slot = s1
-                chosen_delta_e = de1
-                chosen_delta_t = dt1
+                chosen_de = de1
+                chosen_dt = dt1
 
-        if chosen_candidate is not None:
-            route.insert(chosen_slot, chosen_candidate)
-            curr_energy += chosen_delta_e
-            curr_time += chosen_delta_t
-            pool.remove(chosen_candidate)
+        if chosen_cand is not None:
+            route.insert(chosen_slot, chosen_cand)
+            curr_energy += chosen_de
+            curr_time += chosen_dt
+            pool.remove(chosen_cand)
         else:
             break
 
