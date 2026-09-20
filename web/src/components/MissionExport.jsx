@@ -130,22 +130,26 @@ export default function MissionExport({
   const activeContent = previewTab === 'qgc' ? exportData.qgc : previewTab === 'mavlink' ? exportData.mavlink : exportData.csv;
 
   return (
-    <div className="space-y-4 font-mono">
+    <div className="space-y-4">
       {/* Export Banner */}
       <div className="glass-card rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-            <DownloadCloud className="w-4 h-4 text-sky-600" />
-            <span>AUTONOMOUS HARDWARE EXPORT ENGINE</span>
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-sky-50 border border-sky-200/80 flex items-center justify-center text-sky-600">
+            <DownloadCloud className="w-4 h-4" />
           </div>
-          <div className="text-xs text-slate-400 mt-0.5">
-            Serialize mission corridors into PX4/ArduPilot autopilots, QGroundControl plans, and audit logs
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 font-sans tracking-tight">
+              Hardware Export & Serialization Engine
+            </h2>
+            <div className="text-xs text-slate-500 font-sans mt-0.5">
+              Serialize mission corridors into PX4/ArduPilot autopilots, QGroundControl plans, and audit logs
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs">
-          <span className="px-3 py-1 rounded-full glass-pill border border-sky-200/80 bg-sky-50 text-sky-700 font-semibold shadow-sm">
-            COMPLIANT: MAVLink v2.0 / QGC v1
+        <div className="flex items-center gap-2 text-xs font-sans">
+          <span className="px-3 py-1 rounded-xl border border-sky-200/80 bg-sky-50 text-sky-700 font-semibold shadow-sm">
+            Compliant: MAVLink v2.0 / QGC v1
           </span>
         </div>
       </div>
@@ -154,16 +158,16 @@ export default function MissionExport({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="glass-card rounded-2xl p-4 space-y-3.5">
+          <div className="glass-card rounded-2xl p-4 space-y-3.5 font-sans">
             <div className="text-xs font-semibold text-slate-900">
-              SELECT TARGET UAV
+              Select Target UAV
             </div>
 
             <div className="space-y-1">
               <select
                 value={selectedDroneId}
                 onChange={(e) => setSelectedDroneId(e.target.value)}
-                className="glass-input w-full rounded-xl px-3 py-2 text-xs font-mono text-slate-800 bg-white/80 cursor-pointer"
+                className="glass-input w-full rounded-xl px-3 py-2 text-xs font-sans text-slate-800 bg-white/80 cursor-pointer"
               >
                 {routes.map((r) => (
                   <option key={r.drone_id} value={r.drone_id} className="bg-white text-slate-800">
@@ -174,77 +178,77 @@ export default function MissionExport({
             </div>
 
             {/* Mission Corridor Summary Card */}
-            <div className="glass-pill rounded-xl p-3.5 space-y-2 text-xs border border-slate-200/80 bg-white/70 shadow-sm">
-              <div className="font-semibold text-sky-800 border-b border-slate-200/70 pb-1.5 flex justify-between">
-                <span>MISSION SUMMARY // {selectedDroneId}</span>
-                <span className="text-emerald-700 font-semibold">VALIDATED</span>
+            <div className="rounded-xl p-3.5 space-y-2 text-xs border border-slate-200/80 bg-white/70 shadow-sm font-sans">
+              <div className="font-semibold text-slate-900 border-b border-slate-200/70 pb-1.5 flex justify-between">
+                <span>Mission Summary: {selectedDroneId}</span>
+                <span className="text-emerald-700 font-medium">Validated</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>CRUISE SPEED:</span>
-                <span className="text-slate-800 font-semibold">{(selectedDrone?.cruise_speed ?? 14.5).toFixed(1)} m/s</span>
+              <div className="flex justify-between text-slate-500">
+                <span>Cruise Speed:</span>
+                <span className="text-slate-900 font-mono font-semibold">{(selectedDrone?.cruise_speed ?? 14.5).toFixed(1)} m/s</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>WAYPOINT NODES:</span>
-                <span className="text-slate-800 font-semibold">{selectedRoute?.waypoints?.length ?? 0} points</span>
+              <div className="flex justify-between text-slate-500">
+                <span>Waypoint Nodes:</span>
+                <span className="text-slate-900 font-mono font-semibold">{selectedRoute?.waypoints?.length ?? 0} points</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>FLIGHT DURATION:</span>
-                <span className="text-slate-800 font-semibold">{(selectedRoute?.total_flight_time ?? 0).toFixed(0)}s</span>
+              <div className="flex justify-between text-slate-500">
+                <span>Flight Duration:</span>
+                <span className="text-slate-900 font-mono font-semibold">{(selectedRoute?.total_flight_time ?? 0).toFixed(0)}s</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>FINAL BATTERY RESERVE:</span>
-                <span className="text-emerald-600 font-semibold">{(selectedRoute?.final_reserve_percent ?? 100).toFixed(1)}%</span>
+              <div className="flex justify-between text-slate-500">
+                <span>Final Battery Reserve:</span>
+                <span className="text-emerald-600 font-mono font-semibold">{(selectedRoute?.final_reserve_percent ?? 100).toFixed(1)}%</span>
               </div>
-              <div className="flex justify-between text-slate-400">
-                <span>TARGET REWARDS:</span>
-                <span className="text-amber-700 font-semibold">{(selectedRoute?.total_reward ?? 0).toFixed(0)} PTS</span>
+              <div className="flex justify-between text-slate-500">
+                <span>Target Rewards:</span>
+                <span className="text-amber-700 font-mono font-semibold">{(selectedRoute?.total_reward ?? 0).toFixed(0)} PTS</span>
               </div>
             </div>
 
             {/* Download Buttons */}
-            <div className="space-y-2 pt-1">
+            <div className="space-y-2 pt-1 font-sans">
               <button
                 onClick={() => handleDownload('qgc')}
-                className="glass-btn-primary w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold cursor-pointer"
+                className="btn-primary w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium cursor-pointer"
               >
                 <FileCode className="w-4 h-4" />
-                <span>DOWNLOAD QGC PLAN ({selectedDroneId})</span>
+                <span>Download QGC Plan ({selectedDroneId})</span>
               </button>
 
               <button
                 onClick={() => handleDownload('mavlink')}
-                className="glass-btn-secondary w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold cursor-pointer"
+                className="btn-secondary w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium cursor-pointer"
               >
-                <FileText className="w-4 h-4" />
-                <span>DOWNLOAD MAVLINK WAYPOINTS ({selectedDroneId})</span>
+                <FileText className="w-4 h-4 text-slate-500" />
+                <span>Download MAVLink Waypoints ({selectedDroneId})</span>
               </button>
 
               <button
                 onClick={() => handleDownload('csv')}
-                className="glass-btn-secondary w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold cursor-pointer"
+                className="btn-secondary w-full flex items-center justify-center gap-2 py-2 px-3 text-xs font-medium cursor-pointer"
               >
-                <Table className="w-4 h-4" />
-                <span>DOWNLOAD SWARM TELEMETRY CSV</span>
+                <Table className="w-4 h-4 text-slate-500" />
+                <span>Download Swarm Telemetry CSV</span>
               </button>
             </div>
 
             {/* Pre-Flight Validation Checklist */}
-            <div className="glass-pill rounded-xl p-3.5 space-y-2 text-[11px] border border-slate-200/80 bg-white/60 shadow-sm">
-              <div className="font-semibold text-sky-800">PRE-FLIGHT VALIDATION ENGINE</div>
-              <div className="flex items-center gap-2 text-emerald-700">
-                <CheckCircle2 className="w-3.5 h-3.5" />
+            <div className="rounded-xl p-3.5 space-y-2 text-xs border border-slate-200/80 bg-white/60 shadow-sm font-sans">
+              <div className="font-semibold text-slate-900 text-xs">Pre-Flight Validation Engine</div>
+              <div className="flex items-center gap-2 text-emerald-700 text-xs">
+                <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>Waypoint terrain constraints verified</span>
               </div>
-              <div className="flex items-center gap-2 text-emerald-700">
-                <CheckCircle2 className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2 text-emerald-700 text-xs">
+                <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>Battery SoC &gt; 15% safety floor enforced</span>
               </div>
-              <div className="flex items-center gap-2 text-emerald-700">
-                <CheckCircle2 className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2 text-emerald-700 text-xs">
+                <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>Geofence boundary deconflicted</span>
               </div>
-              <div className="flex items-center gap-2 text-emerald-700">
-                <CheckCircle2 className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-2 text-emerald-700 text-xs">
+                <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>CRC32 telemetry checksum passed</span>
               </div>
             </div>
@@ -253,45 +257,33 @@ export default function MissionExport({
 
         {/* Right Column: Live Syntax Preview (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="glass-card rounded-2xl p-4 space-y-3.5">
+          <div className="glass-card rounded-2xl p-4 space-y-3.5 font-sans">
             <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
               <div className="flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-sky-600" />
                 <span className="text-xs font-semibold text-slate-900">
-                  LIVE ARTIFACT PREVIEW
+                  Live Artifact Preview
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 {/* Format Toggle */}
-                <div className="flex glass-pill rounded-xl p-0.5 text-xs border border-slate-200/80 bg-white/70">
+                <div className="segmented-control">
                   <button
                     onClick={() => setPreviewTab('qgc')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                      previewTab === 'qgc'
-                        ? 'bg-white text-slate-900 font-bold shadow-sm'
-                        : 'text-slate-400 hover:text-slate-800'
-                    }`}
+                    className={`segmented-item text-xs ${previewTab === 'qgc' ? 'segmented-item-active' : ''}`}
                   >
                     QGC .plan
                   </button>
                   <button
                     onClick={() => setPreviewTab('mavlink')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                      previewTab === 'mavlink'
-                        ? 'bg-white text-slate-900 font-bold shadow-sm'
-                        : 'text-slate-400 hover:text-slate-800'
-                    }`}
+                    className={`segmented-item text-xs ${previewTab === 'mavlink' ? 'segmented-item-active' : ''}`}
                   >
                     MAVLink
                   </button>
                   <button
                     onClick={() => setPreviewTab('csv')}
-                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                      previewTab === 'csv'
-                        ? 'bg-white text-slate-900 font-bold shadow-sm'
-                        : 'text-slate-400 hover:text-slate-800'
-                    }`}
+                    className={`segmented-item text-xs ${previewTab === 'csv' ? 'segmented-item-active' : ''}`}
                   >
                     CSV Audit
                   </button>
@@ -299,7 +291,7 @@ export default function MissionExport({
 
                 <button
                   onClick={handleCopy}
-                  className="glass-btn-secondary flex items-center gap-1.5 px-3 py-1 rounded-xl text-slate-700 text-xs cursor-pointer"
+                  className="btn-secondary flex items-center gap-1.5 px-2.5 py-1 text-xs cursor-pointer"
                 >
                   {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copied ? 'Copied' : 'Copy'}</span>
@@ -309,9 +301,9 @@ export default function MissionExport({
 
             {/* Code Box */}
             <div className="relative">
-              <pre className="h-[480px] overflow-auto p-4 rounded-xl bg-white/90 border border-slate-200/80 text-[11px] font-mono text-slate-800 leading-relaxed shadow-inner">
+              <pre className="h-[480px] overflow-auto p-4 rounded-xl bg-white/90 border border-slate-200/80 text-xs font-mono text-slate-800 leading-relaxed shadow-inner">
                 {loadingExport ? (
-                  <div className="flex items-center justify-center h-full text-slate-400">
+                  <div className="flex items-center justify-center h-full text-slate-400 font-sans text-xs">
                     Generating flight plan serialization...
                   </div>
                 ) : (

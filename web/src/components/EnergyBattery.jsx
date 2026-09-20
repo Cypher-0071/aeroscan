@@ -44,41 +44,45 @@ export default function EnergyBattery({
   );
 
   return (
-    <div className="space-y-4 font-mono">
+    <div className="space-y-4">
       {/* Energy Banner */}
       <div className="glass-card rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-            <BatteryCharging className="w-4 h-4 text-emerald-600" />
-            <span>SWARM ENERGY INTELLIGENCE // SOC DEPLETION ANALYSIS</span>
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-600">
+            <BatteryCharging className="w-4 h-4" />
           </div>
-          <div className="text-xs text-slate-400 mt-0.5">
-            Aerodynamic power draw, wind drift penalty, and 15% emergency reserve floor monitoring
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 font-sans tracking-tight">
+              Swarm Energy Intelligence & Battery Analysis
+            </h2>
+            <div className="text-xs text-slate-500 font-sans mt-0.5">
+              Aerodynamic power draw, wind drift compensation, and 15% safety floor compliance
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1 rounded-full glass-pill text-xs border border-emerald-200/80 bg-emerald-50">
-          <span className="text-slate-400 font-normal">STATUS:</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-sans border border-emerald-200/80 bg-emerald-50 shadow-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
           <span className={`font-semibold ${minReserveAll >= 15 ? 'text-emerald-700' : 'text-rose-600'}`}>
-            {minReserveAll >= 15 ? 'ALL CONSTRAINTS SATISFIED' : 'FLOOR VIOLATION DETECTED'}
+            {minReserveAll >= 15 ? 'All Constraints Satisfied' : 'Floor Violation Detected'}
           </span>
         </div>
       </div>
 
       {/* Multi-Drone Battery SoC Depletion Curves (SVG Graphic) */}
       <div className="glass-card rounded-2xl p-4 space-y-3.5">
-        <div className="flex items-center justify-between text-xs border-b border-slate-200/80 pb-2.5">
+        <div className="flex items-center justify-between text-xs border-b border-slate-200/80 pb-2.5 font-sans">
           <span className="font-semibold text-slate-900">
-            FLEET BATTERY SOC (%) VS MISSION TIME (SECONDS)
+            Battery State of Charge (%) vs. Mission Time (Seconds)
           </span>
           <div className="flex items-center gap-3">
             {routes.map((r, idx) => (
-              <div key={r.drone_id} className="flex items-center gap-1.5 text-[10px]">
+              <div key={r.drone_id} className="flex items-center gap-1.5 text-xs">
                 <span
-                  className="w-2.5 h-2.5 rounded-full"
+                  className="w-2 h-2 rounded-full"
                   style={{ backgroundColor: DRONE_COLORS[idx % DRONE_COLORS.length] }}
                 />
-                <span className="text-slate-700 font-medium">{r.drone_id}</span>
+                <span className="text-slate-700 font-medium font-mono text-[11px]">{r.drone_id}</span>
               </div>
             ))}
           </div>
@@ -95,7 +99,7 @@ export default function EnergyBattery({
             {/* 15% Safety Floor Area & Line */}
             <rect x="0" y="170" width="500" height="30" fill="rgba(239, 68, 68, 0.06)" />
             <line x1="0" y1="170" x2="500" y2="170" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="5 5" />
-            <text x="10" y="165" fill="#ef4444" fontSize="9" fontWeight="bold">
+            <text x="10" y="165" fill="#ef4444" fontSize="9" fontFamily="Inter, sans-serif" fontWeight="600">
               15% MANDATORY SAFETY FLOOR
             </text>
 
@@ -143,30 +147,30 @@ export default function EnergyBattery({
       </div>
 
       {/* Mission Phase Consumption Progression Strip */}
-      <div className="glass-pill rounded-xl p-3 flex flex-wrap items-center justify-between text-xs border border-slate-200/80 bg-white/60">
-        <span className="text-slate-400 font-semibold">MISSION PHASE CONSUMPTION:</span>
-        <span><b className="text-sky-700">DEPLOY</b> (5.2%)</span>
-        <span className="text-slate-400">&rarr;</span>
-        <span><b className="text-sky-700">TRANSIT</b> (28.4%)</span>
-        <span className="text-slate-400">&rarr;</span>
-        <span><b className="text-sky-700">CLUSTER INGESTION</b> (21.8%)</span>
-        <span className="text-slate-400">&rarr;</span>
-        <span><b className="text-sky-700">TARGET ACQUISITION</b> (29.6%)</span>
-        <span className="text-slate-400">&rarr;</span>
-        <span><b className="text-emerald-600">RETURN BASE</b> (15.0%)</span>
+      <div className="rounded-xl p-3 flex flex-wrap items-center justify-between text-xs border border-slate-200/80 bg-white/70 shadow-sm font-sans">
+        <span className="text-slate-500 font-semibold">Phase Energy Profile:</span>
+        <span><b className="text-sky-700 font-medium">Deploy</b> <span className="font-mono text-slate-500">(5.2%)</span></span>
+        <span className="text-slate-300">&rarr;</span>
+        <span><b className="text-sky-700 font-medium">Transit</b> <span className="font-mono text-slate-500">(28.4%)</span></span>
+        <span className="text-slate-300">&rarr;</span>
+        <span><b className="text-sky-700 font-medium">Cluster Scan</b> <span className="font-mono text-slate-500">(21.8%)</span></span>
+        <span className="text-slate-300">&rarr;</span>
+        <span><b className="text-sky-700 font-medium">Target Acquisition</b> <span className="font-mono text-slate-500">(29.6%)</span></span>
+        <span className="text-slate-300">&rarr;</span>
+        <span><b className="text-emerald-600 font-semibold">Recovery</b> <span className="font-mono text-slate-500">(15.0%)</span></span>
       </div>
 
       {/* Subsystem Power Allocation Breakdown */}
-      <div className="glass-card rounded-2xl p-4 space-y-3.5">
+      <div className="glass-card rounded-2xl p-4 space-y-3.5 font-sans">
         <div className="text-xs font-semibold text-slate-900">
-          SUBSYSTEM POWER ALLOCATION BREAKDOWN
+          Subsystem Power Allocation Breakdown
         </div>
 
-        <div className="space-y-2.5 text-xs">
+        <div className="space-y-3 text-xs">
           <div>
             <div className="flex justify-between text-slate-600 mb-1">
-              <span>BEMT Hover &amp; Aerodynamic Rotor Thrust (~320W)</span>
-              <span className="text-sky-700 font-semibold">48%</span>
+              <span>BEMT Hover & Aerodynamic Rotor Thrust (~320W)</span>
+              <span className="text-sky-700 font-semibold font-mono">48%</span>
             </div>
             <div className="w-full bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
               <div className="bg-sky-500 h-full rounded-full" style={{ width: '48%' }} />
@@ -176,7 +180,7 @@ export default function EnergyBattery({
           <div>
             <div className="flex justify-between text-slate-600 mb-1">
               <span>Forward Flight Parasite Drag Polar (~195W)</span>
-              <span className="text-indigo-700 font-semibold">29%</span>
+              <span className="text-indigo-700 font-semibold font-mono">29%</span>
             </div>
             <div className="w-full bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
               <div className="bg-indigo-500 h-full rounded-full" style={{ width: '29%' }} />
@@ -186,7 +190,7 @@ export default function EnergyBattery({
           <div>
             <div className="flex justify-between text-slate-600 mb-1">
               <span>Vector Wind Drift Crosswind Compensation (~45W)</span>
-              <span className="text-amber-700 font-semibold">12%</span>
+              <span className="text-amber-700 font-semibold font-mono">12%</span>
             </div>
             <div className="w-full bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
               <div className="bg-amber-500 h-full rounded-full" style={{ width: '12%' }} />
@@ -195,8 +199,8 @@ export default function EnergyBattery({
 
           <div>
             <div className="flex justify-between text-slate-600 mb-1">
-              <span>High-Resolution Sensor &amp; Optical Recon Payload (~35W)</span>
-              <span className="text-emerald-700 font-semibold">8%</span>
+              <span>High-Resolution Sensor & Recon Payload (~35W)</span>
+              <span className="text-emerald-700 font-semibold font-mono">8%</span>
             </div>
             <div className="w-full bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
               <div className="bg-emerald-500 h-full rounded-full" style={{ width: '8%' }} />
@@ -205,8 +209,8 @@ export default function EnergyBattery({
 
           <div>
             <div className="flex justify-between text-slate-600 mb-1">
-              <span>Avionics, RTK GNSS &amp; AES-256 Telemetry Link (~15W)</span>
-              <span className="text-slate-600 font-semibold">3%</span>
+              <span>Avionics, RTK GNSS & Telemetry Link (~15W)</span>
+              <span className="text-slate-600 font-semibold font-mono">3%</span>
             </div>
             <div className="w-full bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
               <div className="bg-slate-400 h-full rounded-full" style={{ width: '3%' }} />
@@ -215,38 +219,38 @@ export default function EnergyBattery({
         </div>
       </div>
 
-      {/* 4 KPI Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* 4 Metric Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-sans">
         <div className="glass-card-interactive rounded-2xl p-4 space-y-1">
-          <span className="text-[10px] text-slate-400 block font-medium">MINIMUM FLEET RESERVE</span>
-          <span className="text-xl font-bold text-emerald-600 mt-1 block">
+          <span className="text-xs text-slate-500 font-medium block">Minimum Fleet Reserve</span>
+          <span className="text-2xl font-bold font-mono text-emerald-600 mt-1 block">
             {minReserveAll.toFixed(1)}%
           </span>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">Above 15% Floor</span>
+          <span className="text-xs text-slate-400 mt-0.5 block">Above 15% floor</span>
         </div>
 
         <div className="glass-card-interactive rounded-2xl p-4 space-y-1">
-          <span className="text-[10px] text-slate-400 block font-medium">TOTAL SWARM ENERGY</span>
-          <span className="text-xl font-bold text-sky-700 mt-1 block">
-            {(totalJoules / 1000).toFixed(1)} kJ
+          <span className="text-xs text-slate-500 font-medium block">Total Swarm Energy</span>
+          <span className="text-2xl font-bold font-mono text-sky-700 mt-1 block">
+            {(totalJoules / 1000).toFixed(1)} <span className="text-xs text-slate-400 font-sans font-normal">kJ</span>
           </span>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">Wind-Compensated</span>
+          <span className="text-xs text-slate-400 mt-0.5 block">Wind-compensated</span>
         </div>
 
         <div className="glass-card-interactive rounded-2xl p-4 space-y-1">
-          <span className="text-[10px] text-slate-400 block font-medium">AVERAGE RECOVERY MARGIN</span>
-          <span className="text-xl font-bold text-slate-900 mt-1 block">
+          <span className="text-xs text-slate-500 font-medium block">Average Recovery Margin</span>
+          <span className="text-2xl font-bold font-mono text-slate-900 mt-1 block">
             {avgReserve.toFixed(1)}%
           </span>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">Optimal Land Margin</span>
+          <span className="text-xs text-slate-400 mt-0.5 block">Safe touchdown reserve</span>
         </div>
 
         <div className="glass-card-interactive rounded-2xl p-4 space-y-1">
-          <span className="text-[10px] text-slate-400 block font-medium">SAFETY RESERVE FLOOR</span>
-          <span className="text-xl font-bold text-rose-600 mt-1 block">
+          <span className="text-xs text-slate-500 font-medium block">Safety Reserve Floor</span>
+          <span className="text-2xl font-bold font-mono text-rose-600 mt-1 block">
             15.0%
           </span>
-          <span className="text-[10px] text-slate-400 mt-0.5 block">Strict Constraint</span>
+          <span className="text-xs text-slate-400 mt-0.5 block">Strict hard constraint</span>
         </div>
       </div>
     </div>
