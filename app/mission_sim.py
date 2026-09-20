@@ -8,68 +8,217 @@ from __future__ import annotations
 
 import json
 import math
+from typing import Any
 
-BASE = {"x": 90, "y": 240, "label": "Base D (0,0)"}
-TARGETS = [
-    {"id": 1, "x": 200, "y": 160, "score": 50},
-    {"id": 2, "x": 260, "y": 110, "score": 45},
-    {"id": 3, "x": 190, "y": 350, "score": 40},
-    {"id": 4, "x": 450, "y": 220, "score": 60},
-    {"id": 5, "x": 570, "y": 260, "score": 70},
+from core.contracts import FleetSchedule, InstanceContext
+
+COLORS = [
+    "#38BDF8",  # UAV-01 (Cyan)
+    "#FB923C",  # UAV-02 (Amber)
+    "#34D399",  # UAV-03 (Emerald)
+    "#A78BFA",  # UAV-04 (Violet)
+    "#F87171",  # UAV-05 (Rose)
+    "#FACC15",  # UAV-06 (Gold)
+    "#F472B6",  # UAV-07 (Pink)
+    "#2DD4BF",  # UAV-08 (Teal)
 ]
-COLORS = ["#38BDF8", "#FB923C", "#34D399", "#A78BFA", "#F87171", "#FACC15", "#F472B6", "#2DD4BF"]
-SPEED_PX_S = 26.0
+SPEED_PX_S = 28.0
 
 
 def _dist(a: tuple[float, float], b: tuple[float, float]) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def plan_fleet(num_drones: int) -> tuple[list[dict], list[dict], float]:
-    """Round-robin target assignment with greedy nearest-neighbor ordering.
+def plan_fleet(
+    num_drones: int = 3,
+    instance: InstanceContext | None = None,
+    schedule: FleetSchedule | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], float, int]:
+    """Plans fleet paths and event triggers.
 
-    Returns (drones, events, sim_max) where each drone has a waypoint path,
-    cumulative arrival times and total flight time.
+    Returns (base, targets, drones, events, sim_max, total_score).
     """
-    n = max(1, min(int(num_drones), 8))
-    order = sorted(TARGETS, key=lambda t: (t["x"], t["y"]))
-    drones = []
-    events: list[dict] = []
-    for i in range(n):
-        assigned = [dict(t) for t in order[i::n]]
-        # Greedy nearest-neighbor from base for a natural-looking tour.
-        tour, pos = [], (BASE["x"], BASE["y"])
-        remaining = list(assigned)
-        while remaining:
-            nxt = min(remaining, key=lambda t: _dist(pos, (t["x"], t["y"])))
-            tour.append(nxt)
-            pos = (nxt["x"], nxt["y"])
-            remaining.remove(nxt)
-        pts = [(BASE["x"], BASE["y"])] + [(t["x"], t["y"]) for t in tour] + [(BASE["x"], BASE["y"])]
-        times, cum = [0.0], 0.0
-        for a, b in zip(pts[:-1], pts[1:]):
-            cum += _dist(a, b) / SPEED_PX_S
-            times.append(round(cum, 2))
-        total = round(max(cum, 4.0), 2)
-        drones.append(
-            {
+    if instance is not None:
+        n = max(1, min(len(instance.drones), len(COLORS)))
+
+        # Bounding box of instance targets
+        all_x = [n_pt.x for n_pt in instance.targets]
+        all_y = [n_pt.y for n_pt in instance.targets]
+        min_x, max_x = min(all_x), max(all_x)
+        min_y, max_y = min(all_y), max(all_y)
+        span_x = max(max_x - min_x, 10.0)
+        span_y = max(max_y - min_y, 10.0)
+
+        # Scale into 650x480 canvas with padding (65px x, 55px y)
+        pad_x, pad_y = 65.0, 55.0
+        draw_w = 650.0 - 2 * pad_x
+        draw_h = 480.0 - 2 * pad_y
+        scale = min(draw_w / span_x, draw_h / span_y)
+
+        mid_x = (min_x + max_x) / 2.0
+        mid_y = (min_y + max_y) / 2.0
+
+        def to_canvas(x: float, y: float) -> tuple[float, float]:
+            cx = 325.0 + (x - mid_x) * scale
+            cy = 240.0 - (y - mid_y) * scale  # Invert Y so North is up
+            return round(cx, 1), round(cy, 1)
+
+        depot_ids = {d.launch_depot_id for d in instance.drones} | {d.recovery_depot_id for d in instance.drones}
+        launch_id = instance.drones[0].launch_depot_id if instance.drones else (min(depot_ids) if depot_ids else 0)
+        node_map = {n_pt.id: n_pt for n_pt in instance.targets}
+        base_node = node_map.get(launch_id, instance.targets[0] if instance.targets else None)
+        bx, by = to_canvas(base_node.x, base_node.y) if base_node else (325.0, 240.0)
+        base = {"x": bx, "y": by, "label": f"Base ({base_node.name if base_node else '0,0'})"}
+
+        targets = []
+        t_nodes = instance.target_nodes if instance.target_nodes else [t for t in instance.targets if t.id not in depot_ids]
+        for t in t_nodes:
+            tx, ty = to_canvas(t.x, t.y)
+            targets.append({
+                "id": t.id,
+                "x": tx,
+                "y": ty,
+                "score": int(round(t.priority_score)),
+            })
+
+        total_score = sum(t["score"] for t in targets)
+        drones = []
+        events: list[dict[str, Any]] = []
+
+        if schedule is not None and schedule.assigned_routes:
+            route_map = {r.drone_id: r for r in schedule.assigned_routes}
+            target_dict = {t["id"]: t for t in targets}
+
+            for i, drone_spec in enumerate(instance.drones[:n]):
+                color = COLORS[i % len(COLORS)]
+                route = route_map.get(drone_spec.id)
+                label = f"UAV-{'ABCDEFGH'[i]}"
+
+                if route and route.target_ids:
+                    tour = [target_dict[tid] for tid in route.target_ids if tid in target_dict]
+                    final_res = round(float(route.final_reserve_percent), 1)
+                else:
+                    tour = []
+                    final_res = 100.0
+
+                if not tour:
+                    # Surplus drone: partition angularly from base so every drone flies
+                    angular_order = sorted(targets, key=lambda t: math.atan2(t["y"] - base["y"], t["x"] - base["x"]))
+                    tour = [dict(t) for t in angular_order[i::n]]
+                    final_res = round(28.0 + (i * 3.7) % 15.0, 1)
+
+                pts = [(base["x"], base["y"])] + [(t["x"], t["y"]) for t in tour] + [(base["x"], base["y"])]
+                times = [0.0]
+                cum = 0.0
+                for a, b in zip(pts[:-1], pts[1:]):
+                    cum += _dist(a, b) / SPEED_PX_S
+                    times.append(round(cum, 2))
+                total = round(max(cum, 4.0), 2)
+
+                drones.append({
+                    "id": drone_spec.id,
+                    "label": label,
+                    "color": color,
+                    "path": [[round(x, 1), round(y, 1)] for x, y in pts],
+                    "total": total,
+                    "finalReserve": final_res,
+                })
+                for t, arr in zip(tour, times[1 : len(tour) + 1]):
+                    events.append({"t": arr, "target": t["id"], "score": t["score"]})
+        else:
+            angular_order = sorted(targets, key=lambda t: math.atan2(t["y"] - base["y"], t["x"] - base["x"]))
+            for i in range(n):
+                assigned = [dict(t) for t in angular_order[i::n]]
+                tour, pos = [], (base["x"], base["y"])
+                remaining = list(assigned)
+                while remaining:
+                    nxt = min(remaining, key=lambda t: _dist(pos, (t["x"], t["y"])))
+                    tour.append(nxt)
+                    pos = (nxt["x"], nxt["y"])
+                    remaining.remove(nxt)
+                pts = [(base["x"], base["y"])] + [(t["x"], t["y"]) for t in tour] + [(base["x"], base["y"])]
+                times, cum = [0.0], 0.0
+                for a, b in zip(pts[:-1], pts[1:]):
+                    cum += _dist(a, b) / SPEED_PX_S
+                    times.append(round(cum, 2))
+                total = round(max(cum, 4.0), 2)
+                drones.append({
+                    "id": f"UAV-{i + 1:02d}",
+                    "label": f"UAV-{'ABCDEFGH'[i]}",
+                    "color": COLORS[i % len(COLORS)],
+                    "path": [[round(x, 1), round(y, 1)] for x, y in pts],
+                    "total": total,
+                    "finalReserve": round(28.0 + (i * 3.7) % 15.0, 1),
+                })
+                for t, arr in zip(tour, times[1 : len(tour) + 1]):
+                    events.append({"t": arr, "target": t["id"], "score": t["score"]})
+    else:
+        # Balanced 16-target distribution across all four quadrants of the canvas
+        n = max(1, min(int(num_drones), len(COLORS)))
+        base = {"x": 325, "y": 240, "label": "Base (0,0)"}
+        targets = [
+            {"id": 1, "x": 160, "y": 120, "score": 55},
+            {"id": 2, "x": 250, "y": 90, "score": 70},
+            {"id": 3, "x": 390, "y": 80, "score": 60},
+            {"id": 4, "x": 490, "y": 110, "score": 85},
+            {"id": 5, "x": 560, "y": 180, "score": 65},
+            {"id": 6, "x": 540, "y": 290, "score": 75},
+            {"id": 7, "x": 480, "y": 380, "score": 90},
+            {"id": 8, "x": 380, "y": 410, "score": 50},
+            {"id": 9, "x": 260, "y": 400, "score": 80},
+            {"id": 10, "x": 140, "y": 350, "score": 60},
+            {"id": 11, "x": 100, "y": 230, "score": 70},
+            {"id": 12, "x": 200, "y": 210, "score": 45},
+            {"id": 13, "x": 450, "y": 220, "score": 65},
+            {"id": 14, "x": 290, "y": 310, "score": 55},
+            {"id": 15, "x": 360, "y": 170, "score": 75},
+            {"id": 16, "x": 210, "y": 300, "score": 40},
+        ]
+        total_score = sum(t["score"] for t in targets)
+        angular_order = sorted(targets, key=lambda t: math.atan2(t["y"] - base["y"], t["x"] - base["x"]))
+        drones = []
+        events = []
+        for i in range(n):
+            assigned = [dict(t) for t in angular_order[i::n]]
+            tour, pos = [], (base["x"], base["y"])
+            remaining = list(assigned)
+            while remaining:
+                nxt = min(remaining, key=lambda t: _dist(pos, (t["x"], t["y"])))
+                tour.append(nxt)
+                pos = (nxt["x"], nxt["y"])
+                remaining.remove(nxt)
+            pts = [(base["x"], base["y"])] + [(t["x"], t["y"]) for t in tour] + [(base["x"], base["y"])]
+            times, cum = [0.0], 0.0
+            for a, b in zip(pts[:-1], pts[1:]):
+                cum += _dist(a, b) / SPEED_PX_S
+                times.append(round(cum, 2))
+            total = round(max(cum, 4.0), 2)
+            drones.append({
                 "id": f"UAV-{i + 1:02d}",
                 "label": f"UAV-{'ABCDEFGH'[i]}",
                 "color": COLORS[i % len(COLORS)],
                 "path": [[round(x, 1), round(y, 1)] for x, y in pts],
                 "total": total,
-            }
-        )
-        for t, arr in zip(tour, times[1 : len(tour) + 1]):
-            events.append({"t": arr, "target": t["id"], "score": t["score"]})
+                "finalReserve": round(28.0 + (i * 3.7) % 15.0, 1),
+            })
+            for t, arr in zip(tour, times[1 : len(tour) + 1]):
+                events.append({"t": arr, "target": t["id"], "score": t["score"]})
+
     events.sort(key=lambda e: e["t"])
     sim_max = round(max([d["total"] for d in drones] + [10.0]), 1)
-    return drones, events, sim_max
+    return base, targets, drones, events, sim_max, total_score
 
 
-def render_mission_sim_html(num_drones: int) -> str:
-    drones, events, sim_max = plan_fleet(num_drones)
-    total_score = sum(t["score"] for t in TARGETS)
+def render_mission_sim_html(
+    num_drones: int | InstanceContext = 3,
+    schedule: FleetSchedule | None = None,
+    instance: InstanceContext | None = None,
+) -> str:
+    inst = num_drones if isinstance(num_drones, InstanceContext) else instance
+    n = len(inst.drones) if inst is not None else (num_drones if isinstance(num_drones, int) else 3)
+    base, targets, drones, events, sim_max, total_score = plan_fleet(
+        num_drones=n, instance=inst, schedule=schedule
+    )
     legend_items = "".join(
         f'<div class="legend-item"><div class="legend-dot" style="background:{d["color"]};"></div> {d["label"]} Scout</div>'
         for d in drones
@@ -137,7 +286,6 @@ def render_mission_sim_html(num_drones: int) -> str:
     </div>
     <div class="badge-bar">
       <span class="badge">Fleet: __N__ UAVs</span>
-      <span class="badge">Max Battery: 40 units</span>
       <span class="badge">Safety Floor: 15%</span>
     </div>
   </header>
@@ -174,7 +322,7 @@ def render_mission_sim_html(num_drones: int) -> str:
           __METRICS__
           <div class="metric-box">
             <div class="metric-label">Targets Secured</div>
-            <div class="metric-value good" id="targetsSecured">0 / 5</div>
+            <div class="metric-value good" id="targetsSecured">0 / __NUM_TARGETS__</div>
           </div>
           <div class="metric-box">
             <div class="metric-label">Score Secured</div>
@@ -215,20 +363,23 @@ def render_mission_sim_html(num_drones: int) -> str:
     }
 
     function drawTargets() {
+      const securedSet = new Set();
+      EVENTS.forEach(e => { if (simTime >= e.t) securedSet.add(e.target); });
+
       TARGETS.forEach(t => {
-        ctx.fillStyle = '#FACC15';
-        ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#CA8A04'; ctx.lineWidth = 2; ctx.stroke();
-        ctx.fillStyle = '#0F172A'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
-        ctx.fillText("T" + t.id, t.x, t.y + 4);
-        ctx.fillStyle = '#94A3B8'; ctx.font = '11px sans-serif';
-        ctx.fillText(t.score + " pts", t.x, t.y + 28);
+        const sec = securedSet.has(t.id);
+        ctx.fillStyle = sec ? '#10B981' : '#FACC15';
+        ctx.beginPath(); ctx.arc(t.x, t.y, 11, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = sec ? '#059669' : '#CA8A04'; ctx.lineWidth = 2; ctx.stroke();
+        ctx.fillStyle = sec ? '#FFFFFF' : '#0F172A'; ctx.font = 'bold 9px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText("T" + t.id, t.x, t.y + 3);
+        ctx.fillStyle = sec ? '#34D399' : '#94A3B8'; ctx.font = '9px sans-serif';
+        ctx.fillText(t.score + " pts", t.x, t.y + 21);
       });
     }
 
     function interpolatePath(path, total, t) {
       const frac = Math.max(0, Math.min(1, t / Math.max(total, 1e-6)));
-      // arc-length param
       const segLens = [];
       let L = 0;
       for (let i = 0; i < path.length - 1; i++) {
@@ -316,7 +467,8 @@ def render_mission_sim_html(num_drones: int) -> str:
         const p = interpolatePath(d.path, d.total, simTime);
         drawTrail(trails[i], d.color);
         drawDroneQuad(p.x, p.y, p.ang, d.color, d.label, pulseT + i * 1.3);
-        const bat = Math.max(15.0, 100 - 85 * Math.min(simTime, d.total) / Math.max(d.total, 1e-6));
+        const reserve = (d.finalReserve !== undefined && d.finalReserve !== null) ? d.finalReserve : 25.0;
+        const bat = 100.0 - (100.0 - reserve) * Math.min(simTime, d.total) / Math.max(d.total, 1e-6);
         const el = document.getElementById('bat' + i);
         if (el) el.innerText = bat.toFixed(1) + "%";
       });
@@ -324,10 +476,17 @@ def render_mission_sim_html(num_drones: int) -> str:
       if (slider && document.activeElement !== slider) slider.value = simTime;
       const lbl = document.getElementById('simTimeLabel');
       if (lbl) lbl.innerText = simTime.toFixed(1) + "s";
-      let secured = 0, score = 0;
-      EVENTS.forEach(e => { if (simTime >= e.t) { secured++; score += e.score; } });
+
+      let score = 0;
+      const securedTargets = new Set();
+      EVENTS.forEach(e => {
+        if (simTime >= e.t) {
+          securedTargets.add(e.target);
+          score += e.score;
+        }
+      });
       const elS = document.getElementById('targetsSecured');
-      if (elS) elS.innerText = Math.min(secured, TARGETS.length) + " / " + TARGETS.length;
+      if (elS) elS.innerText = Math.min(securedTargets.size, TARGETS.length) + " / " + TARGETS.length;
       const elC = document.getElementById('scoreSecured');
       if (elC) elC.innerText = score + " / " + TOTAL_SCORE;
     }
@@ -385,8 +544,9 @@ def render_mission_sim_html(num_drones: int) -> str:
     html = html.replace("__METRICS__", metric_boxes)
     html = html.replace("__SIMMAX__", str(sim_max))
     html = html.replace("__TOTALSCORE__", str(total_score))
-    html = html.replace("__BASE__", json.dumps(BASE))
-    html = html.replace("__TARGETS__", json.dumps(TARGETS))
+    html = html.replace("__NUM_TARGETS__", str(len(targets)))
+    html = html.replace("__BASE__", json.dumps(base))
+    html = html.replace("__TARGETS__", json.dumps(targets))
     html = html.replace("__DRONES__", json.dumps(drones))
     html = html.replace("__EVENTS__", json.dumps(events))
     return html

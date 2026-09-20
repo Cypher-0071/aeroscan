@@ -25,6 +25,7 @@ def get_tactical_map_meta(rotation_deg: int = 90) -> tuple[str, int, int] | None
         return None
 
     import io
+
     from PIL import Image
 
     with Image.open(_MAP_IMAGE_PATH) as img:
@@ -696,7 +697,6 @@ def build_mission_map_figure(  # noqa: PLR0913
             )
 
         # Target-lock reticle locking onto the UAV's current destination
-        target_name = str(telem.get("target_name", "DEPOT")).upper()
         tgt = node_map.get(telem.get("current_node_id"))
         if tgt is not None and math.hypot(tgt.x - ux, tgt.y - uy) > 1.0:
             r_lock = 52.0
@@ -1376,7 +1376,9 @@ def build_animated_mission_map_figure(
             seq_x, seq_y, seq_t = [], [], []
             for order, wp in enumerate(route.waypoints[1:-1], start=1):
                 n = node_map[wp.node_id]
-                seq_x.append(n.x); seq_y.append(n.y); seq_t.append(str(order))
+                seq_x.append(n.x)
+                seq_y.append(n.y)
+                seq_t.append(str(order))
             if seq_x:
                 fig.add_trace(go.Scatter(x=seq_x, y=seq_y, mode="markers+text",
                     marker=dict(size=19, color="white", line=dict(color=color, width=2.5)),
@@ -1452,7 +1454,8 @@ def build_animated_mission_map_figure(
                 for i, wp in enumerate(route.waypoints):
                     node = node_map[wp.node_id]
                     if wp.arrival_time <= t:
-                        tx.append(node.x); ty.append(node.y)
+                        tx.append(node.x)
+                        ty.append(node.y)
                     elif i > 0 and route.waypoints[i-1].departure_time < t < wp.arrival_time:
                         prev = node_map[route.waypoints[i-1].node_id]
                         frac = (t - route.waypoints[i-1].departure_time) / max(wp.arrival_time - route.waypoints[i-1].departure_time, 1e-4)
