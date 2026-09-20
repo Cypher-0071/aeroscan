@@ -5,7 +5,7 @@ from __future__ import annotations
 import plotly.graph_objects as go
 import streamlit as st
 
-from app.visualizer import DRONE_COLORS, get_tactical_map_data_uri, get_tactical_map_meta
+from app.visualizer import DRONE_COLORS, get_tactical_map_meta
 from core.contracts import FleetSchedule, InstanceContext
 
 
