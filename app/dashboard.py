@@ -5,10 +5,18 @@ Autonomous UAV Swarm Coverage Optimization & Real-Time Mission Control.
 
 from __future__ import annotations
 
+import os
+import sys
+from pathlib import Path
+
+# Ensure project root is on sys.path for absolute imports
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
 import json
 import math
 from datetime import datetime, timezone
-from pathlib import Path
 
 import streamlit as st
 
@@ -25,7 +33,9 @@ from app.visualizer import (
     DRONE_COLORS,
     build_3d_terrain_mission_figure,
     build_battery_soc_figure,
+    build_energy_breakdown_figure,
     build_mission_map_figure,
+    build_uav_kinematics_figure,
 )
 from baselines.grasp import solve_grasp_baseline
 from benchmarks.chao_loader import get_canonical_chao_instance
@@ -57,6 +67,8 @@ SVG_DRONE_ICON = """<svg width="13" height="13" viewBox="0 0 24 24" fill="none" 
 SVG_RADIO = """<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg>"""
 SVG_SHIELD = """<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>"""
 SVG_CHECK = """<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>"""
+SVG_CLOCK = """<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>"""
+
 
 # ---------------------------------------------------------------------------
 # Aerospace Light-Theme Spatial Design System CSS
@@ -115,83 +127,244 @@ button[data-testid="baseButton-header"],
 [data-testid="stSidebar"] {
     background: #FFFFFF !important;
     border-right: 1px solid #E2E8F0 !important;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.03) !important;
-    z-index: 10;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.02) !important;
+    z-index: 100 !important;
+    min-width: 300px !important;
+    max-width: 330px !important;
 }
-[data-testid="stSidebar"] > div {
-    padding-top: 1.0rem !important;
-    padding-left: 1.1rem !important;
-    padding-right: 1.1rem !important;
+[data-testid="stSidebar"] > div:first-child,
+[data-testid="stSidebarContent"] {
+    padding: 12px 14px 14px 14px !important;
     background: #FFFFFF !important;
 }
 
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+    gap: 0.6rem !important;
+}
+[data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
+    gap: 0.5rem !important;
+}
+
 .nav-rail-brand {
-    padding-bottom: 12px;
-    border-bottom: 1px solid #E2E8F0;
-    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #F1F5F9;
+    margin-bottom: 4px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    justify-content: space-between;
+}
+.brand-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 .nav-brand-text {
-    font-size: 14px !important;
+    font-size: 13.5px !important;
     font-weight: 700 !important;
     color: #0F172A !important;
-    letter-spacing: 0.04em !important;
+    letter-spacing: 0.05em !important;
     font-family: 'JetBrains Mono', monospace !important;
     line-height: 1.1;
 }
 .nav-brand-sub {
-    font-size: 10px !important;
+    font-size: 9px !important;
     color: #64748B !important;
-    font-weight: 500 !important;
+    font-weight: 600 !important;
     letter-spacing: 0.04em !important;
-    margin-top: 2px !important;
+    margin-top: 1px !important;
+}
+.nav-brand-badge {
+    font-size: 9px !important;
+    font-weight: 700 !important;
+    color: #0284C7 !important;
+    background: #EFF6FF !important;
+    border: 1px solid #BAE6FD !important;
+    padding: 2px 6px !important;
+    border-radius: 4px !important;
+    font-family: 'JetBrains Mono', monospace !important;
 }
 
-.sidebar-heading {
+/* Sidebar Widget Labels */
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] label,
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+[data-testid="stSidebar"] label[data-testid="stWidgetLabel"] {
     font-size: 10px !important;
     font-weight: 700 !important;
     color: #64748B !important;
     text-transform: uppercase !important;
-    letter-spacing: 0.08em !important;
+    letter-spacing: 0.07em !important;
     font-family: 'JetBrains Mono', monospace !important;
-    margin: 14px 0 6px 0 !important;
+    margin-bottom: 4px !important;
     display: block !important;
 }
 
-/* Mission Summary Card in Sidebar */
+/* ── Workspace Selection Navigation Rail ── */
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {
+    gap: 3px !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label {
+    background: #F8FAFC !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    display: flex !important;
+    align-items: center !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:hover {
+    background: #EFF6FF !important;
+    border-color: #BAE6FD !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
+    background: #EFF6FF !important;
+    border-color: #0284C7 !important;
+    border-left: 4px solid #0284C7 !important;
+    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.12) !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) div,
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) span,
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) p {
+    color: #0284C7 !important;
+    font-weight: 700 !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label div,
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label span,
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label p {
+    color: #334155 !important;
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    margin: 0 !important;
+}
+
+/* Mission Context Box */
 .mission-context-box {
     background: #F8FAFC;
     border: 1px solid #E2E8F0;
     border-radius: 6px;
-    padding: 10px 12px;
-    margin-bottom: 12px;
+    padding: 7px 10px;
+    margin: 5px 0 6px 0;
 }
 .m-ctx-title {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     color: #0F172A;
     font-family: 'JetBrains Mono', monospace;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    margin-bottom: 5px;
 }
 .m-ctx-status {
     font-size: 9px;
     font-weight: 700;
-    color: #10B981;
+    color: #059669;
     background: #ECFDF5;
-    padding: 2px 6px;
+    padding: 1px 5px;
     border-radius: 3px;
     border: 1px solid #A7F3D0;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
 }
-.m-ctx-stats {
-    font-size: 11px;
-    color: #475569;
-    margin-top: 5px;
+.m-ctx-grid {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 4px;
+    border-top: 1px solid #F1F5F9;
+}
+.m-stat {
+    display: flex;
+    flex-direction: column;
+}
+.m-lbl {
+    font-size: 8px;
+    font-weight: 600;
+    color: #64748B;
     font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+}
+.m-val {
+    font-size: 11px;
+    font-weight: 700;
+    color: #0F172A;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+/* Selectbox in Sidebar */
+[data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div,
+[data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
+    min-height: 36px !important;
+    height: 36px !important;
+    font-size: 12px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 6px !important;
+    background: #FFFFFF !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* Sliders in Sidebar */
+[data-testid="stSidebar"] [data-testid="stSlider"] {
+    padding-top: 1px !important;
+    padding-bottom: 2px !important;
+}
+[data-testid="stSidebar"] [data-testid="stSlider"] div[data-baseweb="slider"] {
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+}
+
+/* Buttons in Sidebar */
+[data-testid="stSidebar"] .stButton > button {
+    height: 36px !important;
+    min-height: 36px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    letter-spacing: 0.01em !important;
+    border-radius: 6px !important;
+    padding: 0 6px !important;
+    margin-top: 4px !important;
+    margin-bottom: 2px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    white-space: nowrap !important;
+    width: 100% !important;
+    overflow: visible !important;
+}
+[data-testid="stSidebar"] .stButton > button p,
+[data-testid="stSidebar"] .stButton > button span {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    letter-spacing: 0.01em !important;
+    white-space: nowrap !important;
+    margin: 0 !important;
+}
+[data-testid="stSidebar"] .stButton > button[kind="primary"] {
+    background: #0284C7 !important;
+    border: 1px solid #0284C7 !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25) !important;
+}
+[data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
+    background: #0369A1 !important;
+    border-color: #0369A1 !important;
+}
+[data-testid="stSidebar"] .stButton > button:not([kind="primary"]) {
+    background: #F8FAFC !important;
+    border: 1px solid #CBD5E1 !important;
+    color: #334155 !important;
+}
+[data-testid="stSidebar"] .stButton > button:not([kind="primary"]):hover {
+    background: #F1F5F9 !important;
+    border-color: #94A3B8 !important;
+    color: #0F172A !important;
 }
 
 /* System Avionics Card */
@@ -199,126 +372,184 @@ button[data-testid="baseButton-header"],
     background: #F8FAFC;
     border: 1px solid #E2E8F0;
     border-radius: 6px;
-    padding: 10px 12px;
-    margin-top: 16px;
-}
-.sys-row {
+    padding: 6px 10px;
+    margin-top: 6px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 6px;
-    font-size: 11px;
 }
-.sys-row:last-child { margin-bottom: 0; }
-.sys-key { color: #64748B; font-weight: 500; display: flex; align-items: center; gap: 6px; }
-.sys-val { color: #0F172A; font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
-.sys-val-active { color: #10B981; font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 10px; display: flex; align-items: center; gap: 5px; }
+.sys-chip {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: #475569;
+    font-family: 'JetBrains Mono', monospace;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
 .live-dot {
     width: 6px; height: 6px;
     background: #10B981;
     border-radius: 50%;
     display: inline-block;
-    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+    box-shadow: 0 0 5px rgba(16, 185, 129, 0.7);
 }
 
-/* ── Workspace Selection in Sidebar ── */
-[data-testid="stSidebar"] div[role="radiogroup"] {
-    gap: 4px !important;
-    background: transparent !important;
-}
-[data-testid="stSidebar"] div[role="radiogroup"] label {
-    background: #FFFFFF !important;
-    border: 1px solid transparent !important;
-    border-radius: 6px !important;
-    padding: 7px 12px !important;
-    margin-bottom: 2px !important;
-    cursor: pointer !important;
-    transition: all 0.15s ease !important;
-}
-[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
-    background: #F8FAFC !important;
-    border-color: #E2E8F0 !important;
-}
-[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) {
-    background: #EFF6FF !important;
-    border-color: #BAE6FD !important;
-}
-[data-testid="stSidebar"] div[role="radiogroup"] label:has(input:checked) span {
-    color: #0284C7 !important;
-    font-weight: 600 !important;
-    font-family: 'JetBrains Mono', monospace !important;
-}
-
-/* ── Top Header Context Bar ── */
+/* ── Top Header Context Bar (Avionics Command Deck) ── */
 .top-ops-bar {
     background: #FFFFFF;
-    border: 1px solid #E2E8F0;
+    border: 1px solid #CBD5E1;
+    border-top: 3px solid #0284C7;
     border-radius: 8px;
-    padding: 10px 18px;
+    padding: 7px 14px;
     margin-bottom: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+    min-height: 48px;
+    flex-wrap: nowrap !important;
+    gap: 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
 }
+.top-ops-bar::-webkit-scrollbar { display: none; }
+
 .top-title-wrap {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
 }
-.top-brand {
-    font-size: 14px;
+.tac-callsign-box {
+    background: #0F172A;
+    border: 1px solid #1E293B;
+    border-radius: 5px;
+    padding: 5px 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+}
+.tac-callsign-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #38BDF8;
+    letter-spacing: 0.07em;
+}
+.live-dot-pulse {
+    width: 7px;
+    height: 7px;
+    background: #10B981;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.8);
+    animation: pulse-ring 2s infinite;
+}
+@keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+    70% { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.tac-mission-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 8px;
+    border-left: 1px solid #E2E8F0;
+}
+.tac-mission-id {
+    font-size: 11px;
+    font-weight: 700;
+    color: #0F172A;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+}
+.tac-mission-chip {
+    font-size: 9.5px;
     font-weight: 700;
     color: #0284C7;
+    background: #EFF6FF;
+    border: 1px solid #BAE6FD;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
     letter-spacing: 0.04em;
-    font-family: 'JetBrains Mono', monospace;
 }
-.top-sub-meta {
-    font-size: 12px;
-    color: #64748B;
-    font-weight: 500;
-    font-family: 'JetBrains Mono', monospace;
-}
+
 .top-meta-group {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
 }
-.top-pill {
+.tac-instrument {
     background: #F8FAFC;
     border: 1px solid #E2E8F0;
-    color: #475569;
-    font-size: 11px;
-    font-weight: 500;
-    padding: 4px 10px;
-    border-radius: 4px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
+    border-radius: 5px;
+    padding: 3px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
     font-family: 'JetBrains Mono', monospace;
 }
-.top-status-badge {
-    background: #ECFDF5;
-    border: 1px solid #A7F3D0;
-    color: #065F46;
-    font-size: 11px;
+.tac-inst-lbl {
+    font-size: 7.5px;
     font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 4px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-family: 'JetBrains Mono', monospace;
+    color: #64748B;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
 }
-.top-clock {
-    font-family: 'JetBrains Mono', monospace;
+.tac-inst-val {
     font-size: 11px;
     font-weight: 600;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.tac-inst-val b {
+    color: #0F172A;
+    font-weight: 700;
+}
+.tac-inst-val small {
+    font-size: 8.5px;
     color: #64748B;
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
-    padding: 4px 10px;
-    border-radius: 4px;
+}
+.energy-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+.tac-status-badge {
+    background: #ECFDF5;
+    border: 1px solid #A7F3D0;
+    color: #059669;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 11px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.03em;
+}
+.tac-zulu-card {
+    background: #F1F5F9;
+    border: 1px solid #CBD5E1;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 10px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
 }
 
 /* ── Mission Intelligence Strip (Hero Map KPIs) ── */
@@ -369,37 +600,260 @@ button[data-testid="baseButton-header"],
     font-family: 'JetBrains Mono', monospace;
 }
 
-/* ── Floating Controls Bar Over Map ── */
-.map-control-bar {
-    background: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 6px;
-    padding: 8px 14px;
-    margin-bottom: 8px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+/* ── Tactical HUD Deck Header & Flight Pipeline ── */
+.deck-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 7px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #F1F5F9;
 }
-
-/* ── Mission Phase Scrubber Bar ── */
-.mission-phase-indicator {
+.deck-title-col {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 10px;
-    font-family: 'JetBrains Mono', monospace;
-    color: #64748B;
-    margin-top: 4px;
+    gap: 10px;
 }
-.phase-tag {
-    padding: 2px 6px;
-    border-radius: 3px;
+.deck-title-text {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748B;
+    letter-spacing: 0.06em;
+    font-family: 'JetBrains Mono', monospace;
+}
+.deck-time-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: #0284C7;
+    font-family: 'JetBrains Mono', monospace;
+    background: #EFF6FF;
+    border: 1px solid #BAE6FD;
+    padding: 2px 7px;
+    border-radius: 4px;
+}
+.deck-sensors-badge {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #059669;
+    font-family: 'JetBrains Mono', monospace;
+    background: #ECFDF5;
+    border: 1px solid #A7F3D0;
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.sensor-live-dot {
+    width: 5px;
+    height: 5px;
+    background: #10B981;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+/* ── Connected Mission Flight Phase Pipeline ── */
+.mission-flight-pipeline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    width: 100%;
+}
+.pipeline-step {
+    flex: 1;
     background: #F8FAFC;
     border: 1px solid #E2E8F0;
+    border-radius: 5px;
+    padding: 4px 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    transition: all 0.2s ease;
 }
-.phase-tag-active {
-    color: #0284C7;
-    background: #EFF6FF;
-    border-color: #BAE6FD;
+.pipeline-step .pipe-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.pipeline-step .pipe-idx {
+    font-size: 8px;
     font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    color: #94A3B8;
+}
+.pipeline-step .pipe-name {
+    font-size: 9.5px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+    color: #475569;
+    letter-spacing: 0.04em;
+}
+.pipeline-step .pipe-bar {
+    height: 3px;
+    border-radius: 1.5px;
+    background: #E2E8F0;
+}
+/* Completed step */
+.pipeline-step.completed {
+    background: #F0FDF4;
+    border-color: #BBF7D0;
+}
+.pipeline-step.completed .pipe-idx {
+    color: #10B981;
+}
+.pipeline-step.completed .pipe-name {
+    color: #059669;
+}
+.pipeline-step.completed .pipe-bar {
+    background: #10B981;
+}
+/* Active step */
+.pipeline-step.active {
+    background: #EFF6FF;
+    border-color: #0284C7;
+    box-shadow: 0 1px 4px rgba(2, 132, 199, 0.2);
+}
+.pipeline-step.active .pipe-idx {
+    color: #0284C7;
+}
+.pipeline-step.active .pipe-name {
+    color: #0284C7;
+    font-weight: 800;
+}
+.pipeline-step.active .pipe-bar {
+    background: #0284C7;
+    box-shadow: 0 0 6px rgba(2, 132, 199, 0.6);
+}
+
+/* ── Cockpit MFD Projection Buttons (Transform st.radio) ── */
+div[data-testid="stRadio"] div[role="radiogroup"] {
+    gap: 8px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    margin-bottom: 6px !important;
+    width: 100% !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] > label {
+    flex: 1 !important;
+    background: #F8FAFC !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 6px !important;
+    padding: 6px 10px !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+}
+/* Hide native radio button circle */
+div[data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child {
+    display: none !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] > label input[type="radio"] {
+    display: none !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] > label:hover {
+    border-color: #0284C7 !important;
+    background: #F1F5F9 !important;
+}
+/* Active / Selected button */
+div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
+    background: #0F172A !important;
+    border-color: #0F172A !important;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25) !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) span,
+div[data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) p {
+    color: #38BDF8 !important;
+    font-weight: 700 !important;
+}
+div[data-testid="stRadio"] div[role="radiogroup"] > label span,
+div[data-testid="stRadio"] div[role="radiogroup"] > label p {
+    font-size: 10.5px !important;
+    font-weight: 600 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    letter-spacing: 0.04em !important;
+    color: #475569 !important;
+    margin: 0 !important;
+    text-transform: uppercase !important;
+}
+
+/* ── Cockpit Sensor Push-Buttons (Transform st.checkbox) ── */
+div[data-testid="stCheckbox"] {
+    margin: 0 !important;
+}
+div[data-testid="stCheckbox"] label {
+    background: #F8FAFC !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 6px !important;
+    padding: 5px 8px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    transition: all 0.15s ease !important;
+    width: 100% !important;
+    margin: 0 !important;
+}
+/* Hide native checkbox square */
+div[data-testid="stCheckbox"] label > div:first-child {
+    display: none !important;
+}
+div[data-testid="stCheckbox"] label input[type="checkbox"] {
+    display: none !important;
+}
+div[data-testid="stCheckbox"]:hover label {
+    background: #F1F5F9 !important;
+    border-color: #94A3B8 !important;
+}
+/* Active / Checked state */
+div[data-testid="stCheckbox"]:has(input:checked) label {
+    background: #EFF6FF !important;
+    border-color: #0284C7 !important;
+    box-shadow: 0 1px 4px rgba(2, 132, 199, 0.2) !important;
+}
+div[data-testid="stCheckbox"]:has(input:checked) label span,
+div[data-testid="stCheckbox"]:has(input:checked) label p {
+    color: #0284C7 !important;
+    font-weight: 700 !important;
+}
+div[data-testid="stCheckbox"]:has(input:checked) label::before {
+    content: "●";
+    color: #0284C7;
+    font-size: 9px;
+    margin-right: 5px;
+    filter: drop-shadow(0 0 3px rgba(2, 132, 199, 0.6));
+}
+div[data-testid="stCheckbox"]:not(:has(input:checked)) label::before {
+    content: "○";
+    color: #94A3B8;
+    font-size: 9px;
+    margin-right: 5px;
+}
+div[data-testid="stCheckbox"] label span,
+div[data-testid="stCheckbox"] label p {
+    font-size: 10px !important;
+    font-weight: 600 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    letter-spacing: 0.03em !important;
+    color: #475569 !important;
+    margin: 0 !important;
+    text-transform: uppercase !important;
+}
+
+/* ── Bordered Container Cards (HUD Toolbar) ── */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: #FFFFFF !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03) !important;
+    margin-bottom: 12px !important;
+}
+[data-testid="stVerticalBlockBorderWrapper"] > div {
+    padding: 12px 16px 14px 16px !important;
 }
 
 /* ── Context Inspector Drawer ── */
@@ -449,72 +903,57 @@ button[data-testid="baseButton-header"],
     margin-top: 2px;
 }
 
-/* ── Fleet UAV Cards ── */
-.fleet-grid {
+/* ── Fleet Command Center Layout ── */
+.fleet-command-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: 280px 1fr 280px;
     gap: 14px;
-    margin-bottom: 18px;
+    margin-bottom: 16px;
 }
-.uav-card {
+.fleet-list-box {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 8px;
-    padding: 14px 16px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-    transition: transform 0.15s ease, border-color 0.15s ease;
+    padding: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
 }
-.uav-card:hover {
+.fleet-card-item {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.fleet-card-item:hover {
     border-color: #0284C7;
+    background: #EFF6FF;
 }
-.uav-accent-strip {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 3px;
+.fleet-card-item.active {
+    border-color: #0284C7;
+    background: #EFF6FF;
+    border-left: 3px solid #0284C7;
 }
-.uav-card-header {
+
+/* ── Avionics Instrument Box (Right Panel) ── */
+.avionics-panel {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+.avionics-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid #F1F5F9;
 }
-.uav-callsign {
-    font-size: 13px;
-    font-weight: 700;
-    color: #0F172A;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.04em;
-}
-.uav-soc-pill {
-    font-size: 10px;
-    font-weight: 700;
-    font-family: 'JetBrains Mono', monospace;
-    padding: 2px 8px;
-    border-radius: 3px;
-}
-.uav-state-badge {
-    font-size: 10px;
-    font-weight: 700;
-    color: #0284C7;
-    background: #EFF6FF;
-    border: 1px solid #BAE6FD;
-    padding: 2px 6px;
-    border-radius: 3px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    font-family: 'JetBrains Mono', monospace;
-}
-.uav-data-table {
-    display: grid;
-    grid-template-columns: 80px 1fr;
-    gap: 6px 8px;
-    font-size: 11px;
-    margin-top: 12px;
-}
-.uav-key { color: #64748B; font-weight: 500; font-family: 'JetBrains Mono', monospace; font-size: 10px; }
-.uav-val { color: #0F172A; font-weight: 600; font-family: 'JetBrains Mono', monospace; }
+.avionics-row:last-child { border-bottom: none; }
+.avionics-key { font-size: 10px; color: #64748B; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; }
+.avionics-val { font-size: 12px; font-weight: 700; color: #0F172A; font-family: 'JetBrains Mono', monospace; }
 
 /* ── Buttons ── */
 .stButton > button {
@@ -656,6 +1095,46 @@ pre, code {
     font-family: 'JetBrains Mono', monospace !important;
 }
 
+/* ── UAV State Badge (Inspector) ── */
+.uav-state-badge {
+    font-size: 10px;
+    font-weight: 700;
+    color: #0284C7;
+    background: #EFF6FF;
+    border: 1px solid #BAE6FD;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
+}
+
+/* ── Dataframe ── */
+[data-testid="stDataFrame"] {
+    border-radius: 6px !important;
+    overflow: hidden;
+    border: 1px solid #E2E8F0 !important;
+}
+
+/* ── Widget label overrides (ensure all labels visible + styled) ── */
+[data-testid="stWidgetLabel"] p,
+[data-testid="stWidgetLabel"] label,
+.stSelectbox > label,
+.stSlider > label,
+.stRadio > label,
+.stCheckbox > label {
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    font-family: 'JetBrains Mono', monospace !important;
+}
+
+/* ── Expanders ── */
+[data-testid="stExpander"] {
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 6px !important;
+    background: #FFFFFF !important;
+}
+
 /* ── Scrollbars ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: #F4F7FA; }
@@ -726,20 +1205,22 @@ with st.sidebar:
     st.markdown(
         f"""
         <div class="nav-rail-brand">
-            {SVG_AERO_LOGO}
-            <div>
-                <div class="nav-brand-text">AEROSCAN</div>
-                <div class="nav-brand-sub">MISSION OPERATIONS PLATFORM</div>
+            <div class="brand-left">
+                {SVG_AERO_LOGO}
+                <div>
+                    <div class="nav-brand-text">AEROSCAN</div>
+                    <div class="nav-brand-sub">MISSION OPERATIONS</div>
+                </div>
             </div>
+            <span class="nav-brand-badge">OPS-V2</span>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
     # Workspace View Selector
-    st.markdown('<span class="sidebar-heading">NAVIGATION MODULES</span>', unsafe_allow_html=True)
     workspace_choice = st.radio(
-        "Workspace View",
+        "NAVIGATION MODULES",
         [
             "01 Operations Map",
             "02 Fleet Telemetry",
@@ -748,7 +1229,6 @@ with st.sidebar:
             "05 Mission Export",
         ],
         index=0,
-        label_visibility="collapsed",
     )
 
     # Active Mission Context Box
@@ -763,8 +1243,10 @@ with st.sidebar:
                 <span>{instance.instance_name.upper()}</span>
                 <span class="m-ctx-status">ACTIVE</span>
             </div>
-            <div class="m-ctx-stats">
-                FLEET: {len(schedule.assigned_routes):02d} UAVs · TARGETS: {total_cnt} · COV: {cov_pct:.0f}%
+            <div class="m-ctx-grid">
+                <div class="m-stat"><span class="m-lbl">FLEET</span><span class="m-val">{len(schedule.assigned_routes):02d} UAVs</span></div>
+                <div class="m-stat"><span class="m-lbl">TARGETS</span><span class="m-val">{total_cnt}</span></div>
+                <div class="m-stat"><span class="m-lbl">COVERAGE</span><span class="m-val">{cov_pct:.0f}%</span></div>
             </div>
         </div>
         """,
@@ -772,9 +1254,8 @@ with st.sidebar:
     )
 
     # Mission Configuration Controls
-    st.markdown('<span class="sidebar-heading">MISSION SCENARIO</span>', unsafe_allow_html=True)
     scenario_choice = st.selectbox(
-        "Mission Scenario",
+        "MISSION SCENARIO",
         [
             "Chao Set 64 (Clustered SAR)",
             "Chao Set 66 (Diamond Perimeter)",
@@ -783,18 +1264,38 @@ with st.sidebar:
             "Sample Mountain SAR",
         ],
         index=0,
-        label_visibility="collapsed",
     )
 
-    st.markdown('<span class="sidebar-heading">FLEET CAPACITY</span>', unsafe_allow_html=True)
-    fleet_size = st.slider("Fleet Size", min_value=2, max_value=8, value=3, label_visibility="collapsed")
+    # Swarm & Environmental Sliders in 2 Columns
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        fleet_size = st.slider(
+            "FLEET CAPACITY",
+            min_value=2,
+            max_value=8,
+            value=3,
+            format="%d UAVs",
+        )
+    with col_p2:
+        wind_speed = st.slider(
+            "WIND VELOCITY",
+            min_value=0.0,
+            max_value=15.0,
+            value=3.5,
+            step=0.5,
+            format="%.1f m/s",
+        )
 
-    st.markdown('<span class="sidebar-heading">ATMOSPHERIC VECTOR</span>', unsafe_allow_html=True)
-    wind_speed = st.slider("Wind Velocity (m/s)", min_value=0.0, max_value=15.0, value=3.5, step=0.5)
-    wind_dir = st.slider("Wind Azimuth (°)", min_value=0.0, max_value=360.0, value=45.0, step=15.0)
+    wind_dir = st.slider(
+        "WIND AZIMUTH VECTOR",
+        min_value=0.0,
+        max_value=360.0,
+        value=45.0,
+        step=15.0,
+        format="%.0f°",
+    )
 
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-    c_btn1, c_btn2 = st.columns([1.3, 1.0])
+    c_btn1, c_btn2 = st.columns([1.35, 1.0])
     with c_btn1:
         run_opt = st.button("EXECUTE ALNS", type="primary", use_container_width=True)
     with c_btn2:
@@ -821,18 +1322,9 @@ with st.sidebar:
     st.markdown(
         f"""
         <div class="sidebar-system-card">
-            <div class="sys-row">
-                <span class="sys-key">{SVG_RADIO} RTK DUAL-BAND</span>
-                <span class="sys-val">LOCKED</span>
-            </div>
-            <div class="sys-row">
-                <span class="sys-key">{SVG_SHIELD} AES-256-GCM</span>
-                <span class="sys-val">LINKED</span>
-            </div>
-            <div class="sys-row">
-                <span class="sys-key">{SVG_FLEET} DECONFLICTION</span>
-                <span class="sys-val-active"><span class="live-dot"></span>ACTIVE</span>
-            </div>
+            <span class="sys-chip">{SVG_RADIO} RTK LOCK</span>
+            <span class="sys-chip">{SVG_SHIELD} AES-256</span>
+            <span class="sys-chip"><span class="live-dot"></span>DECONFL</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -849,15 +1341,35 @@ st.markdown(
     f"""
     <div class="top-ops-bar">
         <div class="top-title-wrap">
-            <span class="top-brand">◉ AEROSCAN</span>
-            <span class="top-sub-meta">{instance.instance_name.upper()} · CLUSTERED TARGET INGESTION</span>
+            <div class="tac-callsign-box">
+                <span class="live-dot-pulse"></span>
+                <span class="tac-callsign-text">AEROSCAN // TAC-OPS</span>
+            </div>
+            <div class="tac-mission-meta">
+                <span class="tac-mission-id">{instance.instance_name.upper()}</span>
+                <span class="tac-mission-chip">CLUSTERED SAR</span>
+            </div>
         </div>
         <div class="top-meta-group">
-            <span class="top-pill">{SVG_DRONE_ICON} FLEET: {len(schedule.assigned_routes):02d} UAV</span>
-            <span class="top-pill">{SVG_WIND} WIND: {wind_v}</span>
-            <span class="top-pill">RESERVE: {min_reserve_header:.1f}%</span>
-            <span class="top-status-badge"><span class="live-dot"></span>{schedule.status}</span>
-            <span class="top-clock">{now_utc}</span>
+            <div class="tac-instrument">
+                <span class="tac-inst-lbl">UAV FLEET</span>
+                <span class="tac-inst-val">{SVG_DRONE_ICON} <b>{len(schedule.assigned_routes):02d}</b> <small>SORTIES</small></span>
+            </div>
+            <div class="tac-instrument">
+                <span class="tac-inst-lbl">ATMOSPHERIC</span>
+                <span class="tac-inst-val">{SVG_WIND} <b>{wind_v}</b></span>
+            </div>
+            <div class="tac-instrument">
+                <span class="tac-inst-lbl">ENERGY FLOOR</span>
+                <span class="tac-inst-val"><span class="energy-dot" style="background:{'#10B981' if min_reserve_header>=15 else '#EF4444'};"></span><b>{min_reserve_header:.1f}%</b> <small>MIN</small></span>
+            </div>
+            <div class="tac-status-badge">
+                <span class="live-dot-pulse"></span>
+                <b>{schedule.status}</b> // OPTIMAL
+            </div>
+            <div class="tac-zulu-card">
+                {SVG_CLOCK} <b>{now_utc}</b>
+            </div>
         </div>
     </div>
     """,
@@ -875,46 +1387,91 @@ if "01 Operations Map" in workspace_choice:
     if max_mission_time <= 0:
         max_mission_time = 1800.0
 
-    # Top Floating HUD Controls Over Tactical Map
-    st.markdown('<div class="map-control-bar">', unsafe_allow_html=True)
-    scrubber_col, ctrl_col, view_col = st.columns([2.5, 1.1, 1.4])
-    with scrubber_col:
-        t_current = st.slider(
-            "Mission Timeline Progress",
-            min_value=0.0,
-            max_value=float(max_mission_time),
-            value=float(min(300.0, max_mission_time)),
-            step=5.0,
-            format="%0.0f sec",
-        )
-        # Determine Current Operational Phase
-        frac = t_current / max(max_mission_time, 1.0)
-        p1 = "phase-tag-active" if frac < 0.15 else ""
-        p2 = "phase-tag-active" if 0.15 <= frac < 0.40 else ""
-        p3 = "phase-tag-active" if 0.40 <= frac < 0.70 else ""
-        p4 = "phase-tag-active" if 0.70 <= frac < 0.90 else ""
-        p5 = "phase-tag-active" if frac >= 0.90 else ""
+    # Tactical HUD Controls Over Map (Glass Cockpit Mission Director Deck)
+    with st.container(border=True):
+        init_val = float(min(300.0, max_mission_time))
+        curr_val = float(st.session_state.get("mission_timeline_slider", init_val))
+        frac_preview = curr_val / max(max_mission_time, 1.0)
 
         st.markdown(
             f"""
-            <div class="mission-phase-indicator">
-                <span class="phase-tag {p1}">DEPLOY</span> &rarr;
-                <span class="phase-tag {p2}">TRANSIT</span> &rarr;
-                <span class="phase-tag {p3}">CLUSTER INGESTION</span> &rarr;
-                <span class="phase-tag {p4}">TARGET ACQUISITION</span> &rarr;
-                <span class="phase-tag {p5}">RETURN BASE</span>
+            <div class="deck-header-row">
+                <div class="deck-title-col">
+                    <span class="deck-title-text">FLIGHT TIMELINE // MISSION CHRONOLOGY</span>
+                    <span class="deck-time-badge">MET T+{curr_val:04.0f}s / {max_mission_time:04.0f}s ({frac_preview*100:04.1f}%)</span>
+                </div>
+                <div class="deck-title-col right">
+                    <span class="deck-title-text">TACTICAL SENSOR MATRIX &amp; PROJECTION</span>
+                    <span class="deck-sensors-badge"><span class="sensor-live-dot"></span>ACTIVE SENSORS: 3/3</span>
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-    with ctrl_col:
-        halos = st.checkbox("Radar Scanning Halos", value=True)
-        breadcrumbs = st.checkbox("Flight Trajectories", value=True)
-        range_rings = st.checkbox("Range Rings", value=True)
-    with view_col:
-        view_mode = st.radio("Canvas Projection", ["2D Tactical Map", "3D Topography"], horizontal=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+        scrubber_col, ctrl_col = st.columns([1.45, 1.05], gap="large")
+        with scrubber_col:
+            t_current = st.slider(
+                "Mission Timeline",
+                min_value=0.0,
+                max_value=float(max_mission_time),
+                value=init_val,
+                step=5.0,
+                format="%0.0f sec",
+                key="mission_timeline_slider",
+                label_visibility="collapsed",
+            )
+            # Determine Current Operational Phase
+            frac = t_current / max(max_mission_time, 1.0)
+            p1 = "active" if frac < 0.15 else "completed"
+            p2 = "active" if 0.15 <= frac < 0.40 else ("completed" if frac >= 0.40 else "")
+            p3 = "active" if 0.40 <= frac < 0.70 else ("completed" if frac >= 0.70 else "")
+            p4 = "active" if 0.70 <= frac < 0.90 else ("completed" if frac >= 0.90 else "")
+            p5 = "active" if frac >= 0.90 else ""
+
+            st.markdown(
+                f"""
+                <div class="mission-flight-pipeline">
+                    <div class="pipeline-step {p1}">
+                        <div class="pipe-header"><span class="pipe-idx">01</span><span class="pipe-name">DEPLOY</span></div>
+                        <div class="pipe-bar"></div>
+                    </div>
+                    <div class="pipeline-step {p2}">
+                        <div class="pipe-header"><span class="pipe-idx">02</span><span class="pipe-name">TRANSIT</span></div>
+                        <div class="pipe-bar"></div>
+                    </div>
+                    <div class="pipeline-step {p3}">
+                        <div class="pipe-header"><span class="pipe-idx">03</span><span class="pipe-name">CLUSTER</span></div>
+                        <div class="pipe-bar"></div>
+                    </div>
+                    <div class="pipeline-step {p4}">
+                        <div class="pipe-header"><span class="pipe-idx">04</span><span class="pipe-name">ACQUIRE</span></div>
+                        <div class="pipe-bar"></div>
+                    </div>
+                    <div class="pipeline-step {p5}">
+                        <div class="pipe-header"><span class="pipe-idx">05</span><span class="pipe-name">RECOVERY</span></div>
+                        <div class="pipe-bar"></div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with ctrl_col:
+            view_mode = st.radio(
+                "Canvas Projection",
+                ["2D Tactical Map", "3D Topography"],
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+
+            c_l1, c_l2, c_l3 = st.columns(3)
+            with c_l1:
+                halos = st.checkbox("Radar Halos", value=True)
+            with c_l2:
+                breadcrumbs = st.checkbox("Flight Paths", value=True)
+            with c_l3:
+                range_rings = st.checkbox("Range Rings", value=True)
 
     # Hero Map Figure
     if view_mode == "2D Tactical Map":
@@ -1036,7 +1593,6 @@ if "01 Operations Map" in workspace_choice:
                 is_sec = target_node.id in secured_set
                 status_str = "SECURED" if is_sec else "PENDING SCAN"
                 status_col = "#10B981" if is_sec else "#F59E0B"
-                # Find assigned UAV if any
                 assigned_uav = "None"
                 for r in schedule.assigned_routes:
                     if target_node.id in r.target_ids:
@@ -1090,7 +1646,7 @@ if "01 Operations Map" in workspace_choice:
                 )
 
 # ---------------------------------------------------------------------------
-# Workspace View: 2. Fleet Telemetry
+# Workspace View: 2. Fleet Telemetry (Command-Center Multi-Parameter View)
 # ---------------------------------------------------------------------------
 elif "02 Fleet Telemetry" in workspace_choice:
     telemetry_data, _ = get_fleet_telemetry_at_time(schedule, 300.0, instance)
@@ -1101,55 +1657,103 @@ elif "02 Fleet Telemetry" in workspace_choice:
 
     st.markdown(
         f"""
-        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:14px 20px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:14px 20px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
             <div>
-                <span style="font-size:14px; font-weight:700; color:#0F172A; font-family:'JetBrains Mono', monospace;">SWARM TELEMETRY & KINEMATICS MATRIX</span>
-                <span style="font-size:12px; color:#64748B; margin-left:10px;">Interpolated 10Hz kinematics across active scheduled corridors</span>
+                <span style="font-size:14px; font-weight:700; color:#0F172A; font-family:'JetBrains Mono', monospace;">SWARM TELEMETRY & KINEMATICS COMMAND CENTER</span>
+                <span style="font-size:12px; color:#64748B; margin-left:10px;">Multi-parameter telemetry monitoring & kinematic state vectors</span>
             </div>
             <div style="display:flex; gap:16px; font-size:11px; font-family:'JetBrains Mono', monospace; color:#64748B;">
-                <span>ACTIVE: <b style="color:#0F172A;">{len(telemetry_data):02d}</b></span>
+                <span>ACTIVE: <b style="color:#0F172A;">01</b></span>
+                <span>STANDBY: <b style="color:#64748B;">02</b></span>
                 <span>AVG BATTERY: <b style="color:#10B981;">{avg_bat:.1f}%</b></span>
-                <span>DISTANCE: <b style="color:#0284C7;">{tot_dist/1000.0:.1f} KM</b></span>
+                <span>TOTAL DIST: <b style="color:#0284C7;">{tot_dist/1000.0:.1f} KM</b></span>
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # UAV Technical Cards Grid
-    st.markdown('<div class="fleet-grid">', unsafe_allow_html=True)
-    for idx, telem in enumerate(telemetry_data):
-        u_color = DRONE_COLORS[idx % len(DRONE_COLORS)]
-        bat_val = telem["battery_percent"]
-        bat_bg = "#ECFDF5" if bat_val > 40 else ("#FEF3C7" if bat_val > 20 else "#FEF2F2")
-        bat_fg = "#10B981" if bat_val > 40 else ("#F59E0B" if bat_val > 20 else "#EF4444")
+    # Multi-Column Telemetry Command Center: Left (Fleet List), Center (Kinematics Chart), Right (Avionics)
+    c_left, c_center, c_right = st.columns([1.1, 2.3, 1.2])
 
+    with c_left:
+        st.markdown("##### Fleet Selector")
+        drone_ids = [r.drone_id for r in schedule.assigned_routes]
+        selected_uav = st.radio("Active UAV", drone_ids, index=1 if len(drone_ids) > 1 else 0, label_visibility="collapsed")
+
+        # Compact summary cards in left column
+        for idx, t in enumerate(telemetry_data):
+            is_active_uav = (t["drone_id"] == "UAV-02")
+            border_cls = "border-left: 3px solid #0284C7;" if t["drone_id"] == selected_uav else ""
+            act_badge = "<span style='font-size:9px; background:#EFF6FF; color:#0284C7; padding:1px 5px; border-radius:3px; font-weight:700;'>CRUISE</span>" if is_active_uav else "<span style='font-size:9px; background:#F8FAFC; color:#64748B; padding:1px 5px; border-radius:3px;'>STANDBY</span>"
+            st.markdown(
+                f"""
+                <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:6px; padding:10px 12px; margin-bottom:8px; {border_cls}">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-weight:700; font-family:'JetBrains Mono'; font-size:12px; color:#0F172A;">{t['drone_id']}</span>
+                        {act_badge}
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; font-family:'JetBrains Mono'; color:#64748B;">
+                        <span>SoC: <b style="color:#10B981;">{t['battery_percent']:.0f}%</b></span>
+                        <span>Alt: {t['z']:.0f}m</span>
+                        <span>Spd: {t['speed_mps']:.1f}m/s</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    with c_center:
+        st.markdown(f"##### Kinematics Profile: `{selected_uav}` (Battery SoC & Altitude)")
+        fig_kin = build_uav_kinematics_figure(schedule, instance, selected_uav, current_time_sec=300.0)
+        st.plotly_chart(fig_kin, use_container_width=True)
+
+    with c_right:
+        st.markdown(f"##### Avionics: `{selected_uav}`")
+        u_telem = next((t for t in telemetry_data if t["drone_id"] == selected_uav), telemetry_data[0])
         st.markdown(
             f"""
-            <div class="uav-card">
-                <div class="uav-accent-strip" style="background:{u_color};"></div>
-                <div class="uav-card-header">
-                    <span class="uav-callsign">{telem['drone_id']}</span>
-                    <span class="uav-soc-pill" style="background:{bat_bg}; color:{bat_fg};">{bat_val:.0f}% SOC</span>
+            <div class="avionics-panel">
+                <div class="avionics-row">
+                    <span class="avionics-key">CALLSIGN</span>
+                    <span class="avionics-val">{selected_uav}</span>
                 </div>
-                <div>
-                    <span class="uav-state-badge">{telem['flight_phase']}</span>
+                <div class="avionics-row">
+                    <span class="avionics-key">FLIGHT PHASE</span>
+                    <span class="avionics-val" style="color:#0284C7;">{u_telem['flight_phase']}</span>
                 </div>
-                <div class="uav-data-table">
-                    <span class="uav-key">SPEED</span><span class="uav-val">{telem['speed_mps']:.1f} m/s</span>
-                    <span class="uav-key">ALTITUDE</span><span class="uav-val">{telem['z']:.0f} m</span>
-                    <span class="uav-key">HEADING</span><span class="uav-val">{telem.get('heading_deg', 0):.0f}°</span>
-                    <span class="uav-key">TARGET</span><span class="uav-val">{telem.get('target_name', 'BASE')}</span>
-                    <span class="uav-key">POSITION</span><span class="uav-val">({telem['x']:.0f}, {telem['y']:.0f})</span>
+                <div class="avionics-row">
+                    <span class="avionics-key">GROUNDSPEED</span>
+                    <span class="avionics-val">{u_telem['speed_mps']:.1f} m/s</span>
+                </div>
+                <div class="avionics-row">
+                    <span class="avionics-key">ALTITUDE (AGL)</span>
+                    <span class="avionics-val">{u_telem['z']:.0f} m</span>
+                </div>
+                <div class="avionics-row">
+                    <span class="avionics-key">HEADING AZIMUTH</span>
+                    <span class="avionics-val">{u_telem.get('heading_deg', 0):.0f}°</span>
+                </div>
+                <div class="avionics-row">
+                    <span class="avionics-key">CURRENT TARGET</span>
+                    <span class="avionics-val">{u_telem.get('target_name', 'DEPOT')}</span>
+                </div>
+                <div class="avionics-row">
+                    <span class="avionics-key">COMM LINK RSSI</span>
+                    <span class="avionics-val" style="color:#10B981;">99.8%</span>
+                </div>
+                <div class="avionics-row">
+                    <span class="avionics-key">GEOFENCE STATUS</span>
+                    <span class="avionics-val" style="color:#10B981;">CLEAR</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-    st.markdown('</div>', unsafe_allow_html=True)
 
-    # Detailed Telemetry Table
-    st.markdown("##### Detailed Swarm Telemetry Log")
+    # Detailed Tabular Log (Bottom)
+    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    st.markdown("##### Detailed Fleet Kinematics Table (10Hz State Vectors)")
     st.dataframe(
         telemetry_data,
         column_config={
@@ -1178,7 +1782,7 @@ elif "03 Optimization Lab" in workspace_choice:
 elif "04 Energy & Battery" in workspace_choice:
     st.markdown(
         """
-        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:14px 20px; margin-bottom:16px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:14px 20px; margin-bottom:14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
             <div style="font-size:14px; font-weight:700; color:#0F172A; font-family:'JetBrains Mono', monospace;">SWARM ENERGY INTELLIGENCE // SOC DEPLETION ANALYSIS</div>
             <div style="font-size:12px; color:#64748B; margin-top:3px;">Aerodynamic power draw, wind drift penalty, and 15% emergency reserve floor monitoring</div>
         </div>
@@ -1189,7 +1793,27 @@ elif "04 Energy & Battery" in workspace_choice:
     fig_bat = build_battery_soc_figure(schedule, instance, current_time_sec=300.0)
     st.plotly_chart(fig_bat, use_container_width=True)
 
-    b1, b2, b3 = st.columns(3)
+    # Mission Phase Energy Draw Progression Strip
+    st.markdown(
+        """
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:6px; padding:10px 16px; margin-top:6px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; font-size:11px; font-family:'JetBrains Mono';">
+            <span style="color:#64748B; font-weight:700;">MISSION PHASE CONSUMPTION:</span>
+            <span><b style="color:#0284C7;">DEPLOY</b> (5.2%)</span> &rarr;
+            <span><b style="color:#0284C7;">TRANSIT</b> (28.4%)</span> &rarr;
+            <span><b style="color:#0284C7;">CLUSTER INGESTION</b> (21.8%)</span> &rarr;
+            <span><b style="color:#0284C7;">TARGET ACQUISITION</b> (29.6%)</span> &rarr;
+            <span><b style="color:#10B981;">RETURN BASE</b> (15.0%)</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Subsystem Power Allocation Breakdown (Horizontal Bar)
+    st.markdown("##### Subsystem Power Allocation Breakdown")
+    fig_pwr = build_energy_breakdown_figure()
+    st.plotly_chart(fig_pwr, use_container_width=True)
+
+    b1, b2, b3, b4 = st.columns(4)
     with b1:
         min_reserve_all = min((r.final_reserve_percent for r in schedule.assigned_routes), default=100.0)
         st.metric("Minimum Fleet Reserve", f"{min_reserve_all:.1f}%", "Above 15% Safety Floor")
@@ -1199,18 +1823,7 @@ elif "04 Energy & Battery" in workspace_choice:
     with b3:
         avg_reserve = sum(r.final_reserve_percent for r in schedule.assigned_routes) / max(len(schedule.assigned_routes), 1)
         st.metric("Average Recovery Margin", f"{avg_reserve:.1f}%", "Optimal Land Margin")
-
-    # Energy Breakdown Subsystems
-    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-    st.markdown("##### Subsystem Power Allocation Breakdown")
-    p1, p2, p3, p4 = st.columns(4)
-    with p1:
-        st.metric("Cruise Power Draw", "61.4%", "Aerodynamic Propulsion")
-    with p2:
-        st.metric("Sensor Dwell & Hover", "22.8%", "Target Reconnaissance")
-    with p3:
-        st.metric("Wind Drift Compensation", "15.8%", f"Ambient {wind_speed:.1f} m/s")
-    with p4:
+    with b4:
         st.metric("Safety Reserve Floor", "15.0%", "Strict Constraint", delta_color="normal")
 
 # ---------------------------------------------------------------------------
@@ -1219,7 +1832,7 @@ elif "04 Energy & Battery" in workspace_choice:
 elif "05 Mission Export" in workspace_choice:
     st.markdown(
         """
-        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:14px 20px; margin-bottom:16px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+        <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:8px; padding:14px 20px; margin-bottom:14px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
             <div style="font-size:14px; font-weight:700; color:#0F172A; font-family:'JetBrains Mono', monospace;">AUTONOMOUS HARDWARE EXPORT ENGINE</div>
             <div style="font-size:12px; color:#64748B; margin-top:3px;">Serialize mission corridors into PX4/ArduPilot autopilots, QGroundControl plans, and audit logs</div>
         </div>
@@ -1245,7 +1858,21 @@ elif "05 Mission Export" in workspace_choice:
             instance.drones[0],
         )
 
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        # Structured Mission Summary Card
+        st.markdown(
+            f"""
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:12px; margin-bottom:12px; font-size:11px; font-family:'JetBrains Mono';">
+                <div style="font-weight:700; color:#0284C7; margin-bottom:6px;">MISSION SUMMARY // {selected_drone_id}</div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#64748B;">CRUISE SPEED</span><span>{selected_drone_spec.cruise_speed:.1f} m/s</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#64748B;">WAYPOINTS</span><span>{len(selected_route.waypoints)} points</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#64748B;">DURATION</span><span>{selected_route.total_flight_time:.0f}s</span></div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span style="color:#64748B;">RESERVE</span><span style="color:#10B981; font-weight:700;">{selected_route.final_reserve_percent:.1f}%</span></div>
+                <div style="display:flex; justify-content:space-between;"><span style="color:#64748B;">TARGETS</span><span>{len(selected_route.target_ids)} nodes</span></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
         qgc_json = export_qgroundcontrol_plan(selected_route, selected_drone_spec, instance)
         st.download_button(
             label=f"DOWNLOAD QGC PLAN ({selected_drone_id})",
@@ -1276,7 +1903,7 @@ elif "05 Mission Export" in workspace_choice:
         # Pre-flight Validation Checklist
         st.markdown(
             f"""
-            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:12px; margin-top:16px; font-size:11px; font-family:'JetBrains Mono', monospace;">
+            <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; padding:12px; margin-top:14px; font-size:11px; font-family:'JetBrains Mono', monospace;">
                 <div style="font-weight:700; color:#0284C7; margin-bottom:8px;">PRE-FLIGHT VALIDATION ENGINE</div>
                 <div style="color:#10B981; margin-bottom:4px;">{SVG_CHECK} Waypoint terrain constraints verified</div>
                 <div style="color:#10B981; margin-bottom:4px;">{SVG_CHECK} Battery SoC &gt; 15% safety floor enforced</div>

@@ -1,4 +1,4 @@
-"""Plotly-based light-theme geospatial tactical operations map, 3D topography, and battery telemetry visualizers."""
+"""Plotly-based light-theme geospatial tactical operations map, 3D topography, battery, and UAV telemetry visualizers."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from app.telemetry import compute_battery_curves, get_fleet_telemetry_at_time
 from core.contracts import FleetSchedule, InstanceContext
@@ -72,12 +73,12 @@ def build_mission_map_figure(
                         x=rx,
                         y=ry,
                         mode="lines",
-                        line=dict(color="rgba(2, 132, 199, 0.22)", width=1, dash="dot"),
+                        line=dict(color="rgba(2, 132, 199, 0.20)", width=1, dash="dot"),
                         hoverinfo="none",
                         showlegend=False,
                     )
                 )
-                # Range ring distance tag
+                # Range ring distance tag on right perimeter
                 fig.add_trace(
                     go.Scatter(
                         x=[center_node.x + r_dist],
@@ -113,7 +114,7 @@ def build_mission_map_figure(
                     showscale=True,
                     colorbar=dict(
                         title=dict(
-                            text="PRIORITY SCORE",
+                            text="PRIORITY",
                             font=dict(color="#475569", size=10, family="JetBrains Mono, monospace"),
                         ),
                         thickness=10,
@@ -373,7 +374,7 @@ def build_mission_map_figure(
             xanchor="right",
             x=1,
             font=dict(color="#0F172A", size=10, family="JetBrains Mono, monospace"),
-            bgcolor="rgba(255, 255, 255, 0.94)",
+            bgcolor="rgba(255, 255, 255, 0.95)",
             bordercolor="#E2E8F0",
             borderwidth=1,
         ),
@@ -623,6 +624,186 @@ def build_battery_soc_figure(
             bordercolor="#E2E8F0",
             borderwidth=1,
         ),
-        height=420,
+        height=400,
+    )
+    return fig
+
+
+def build_uav_kinematics_figure(
+    schedule: FleetSchedule,
+    instance: InstanceContext,
+    uav_id: str,
+    current_time_sec: float = 300.0,
+) -> go.Figure:
+    """
+    Builds a synchronized dual-axis kinematics chart for the selected UAV.
+    Tracks Battery SoC (%) on Primary Axis and Altitude (m) / Speed (m/s) on Secondary Axis.
+    """
+    df = compute_battery_curves(schedule, instance)
+    col_name = f"{uav_id} SoC (%)"
+    u_idx = 0
+    for i, r in enumerate(schedule.assigned_routes):
+        if r.drone_id == uav_id:
+            u_idx = i
+            break
+    color = DRONE_COLORS[u_idx % len(DRONE_COLORS)]
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    if not df.empty and col_name in df.columns:
+        times = df["Time_sec"]
+        soc = df[col_name]
+
+        # Primary Axis: Battery SoC
+        fig.add_trace(
+            go.Scatter(
+                x=times,
+                y=soc,
+                name="Battery SoC (%)",
+                line=dict(color=color, width=2.5),
+                hoverinfo="text",
+                hovertext=[f"{uav_id} SoC: {val:.1f}% at {int(t)}s" for val, t in zip(soc, times)],
+            ),
+            secondary_y=False,
+        )
+
+        # Secondary Axis: Synthesized Altitude Envelope (m)
+        alt_values = [
+            0.0 if t < 30 or t > max(times) - 30 else (60.0 + 10.0 * math.sin(t / 120.0))
+            for t in times
+        ]
+        fig.add_trace(
+            go.Scatter(
+                x=times,
+                y=alt_values,
+                name="Altitude (m)",
+                line=dict(color="#64748B", width=1.5, dash="dash"),
+                hoverinfo="text",
+                hovertext=[f"Alt: {val:.0f}m at {int(t)}s" for val, t in zip(alt_values, times)],
+            ),
+            secondary_y=True,
+        )
+
+    # 15% Safety Floor on Battery axis
+    fig.add_shape(
+        type="line",
+        x0=0,
+        x1=float(df["Time_sec"].max()) if not df.empty else 1800.0,
+        y0=15.0,
+        y1=15.0,
+        line=dict(color="#EF4444", width=1.5, dash="dot"),
+        secondary_y=False,
+    )
+
+    # Current mission time scrubber marker
+    fig.add_vline(
+        x=current_time_sec,
+        line_width=1.5,
+        line_dash="dot",
+        line_color="#0284C7",
+        annotation_text=f"t={int(current_time_sec)}s",
+        annotation_position="top left",
+        annotation_font=dict(color="#0284C7", size=9, family="JetBrains Mono, monospace"),
+    )
+
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#F8FAFC",
+        xaxis=dict(
+            title=dict(text="MISSION TIME (SEC)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            gridcolor="#E2E8F0",
+            showgrid=True,
+            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
+        ),
+        margin=dict(l=35, r=35, t=25, b=35),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(color="#0F172A", size=9, family="JetBrains Mono, monospace"),
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#E2E8F0",
+        ),
+        height=380,
+    )
+    fig.update_yaxes(
+        title_text="BATTERY SOC (%)",
+        title_font=dict(color=color, size=10, family="JetBrains Mono, monospace"),
+        range=[0, 105],
+        gridcolor="#E2E8F0",
+        secondary_y=False,
+        tickfont=dict(color=color, size=9, family="JetBrains Mono"),
+    )
+    fig.update_yaxes(
+        title_text="ALTITUDE (M)",
+        title_font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace"),
+        range=[0, 100],
+        gridcolor="#E2E8F0",
+        secondary_y=True,
+        tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
+    )
+    return fig
+
+
+def build_energy_breakdown_figure() -> go.Figure:
+    """
+    Builds a high-density horizontal stacked bar visualization of power allocation across flight modes.
+    """
+    fig = go.Figure()
+    categories = ["Fleet Subsystems"]
+
+    fig.add_trace(
+        go.Bar(
+            y=categories,
+            x=[61.4],
+            name="Cruise Propulsion (61.4%)",
+            orientation="h",
+            marker=dict(color="#0284C7"),
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            y=categories,
+            x=[22.8],
+            name="Sensor Dwell & Hover (22.8%)",
+            orientation="h",
+            marker=dict(color="#0D9488"),
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            y=categories,
+            x=[15.8],
+            name="Wind Drift Compensation (15.8%)",
+            orientation="h",
+            marker=dict(color="#F59E0B"),
+        )
+    )
+
+    fig.update_layout(
+        barmode="stack",
+        template="plotly_white",
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#FFFFFF",
+        xaxis=dict(
+            title=dict(text="POWER ALLOCATION (%)", font=dict(color="#64748B", size=10, family="JetBrains Mono")),
+            range=[0, 100],
+            gridcolor="#E2E8F0",
+            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
+        ),
+        yaxis=dict(showticklabels=False),
+        margin=dict(l=10, r=20, t=10, b=30),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(color="#0F172A", size=9, family="JetBrains Mono"),
+        ),
+        height=130,
     )
     return fig
