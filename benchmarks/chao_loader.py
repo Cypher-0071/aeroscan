@@ -112,7 +112,9 @@ class ChaoManifestError(ValueError):
     """Raised when the benchmark manifest is missing, malformed, or inconsistent."""
 
 
-def load_manifest(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> tuple[dict, list[ChaoInstanceMetadata]]:
+def load_manifest(
+    manifest_path: str | Path = DEFAULT_MANIFEST_PATH,
+) -> tuple[dict, list[ChaoInstanceMetadata]]:
     """Loads and validates the benchmark manifest.
 
     Returns the raw manifest document and the normalized instance entries.
@@ -126,7 +128,9 @@ def load_manifest(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> tuple[di
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise ChaoManifestError(f"{path}: invalid JSON at line {exc.lineno} column {exc.colno}") from exc
+        raise ChaoManifestError(
+            f"{path}: invalid JSON at line {exc.lineno} column {exc.colno}"
+        ) from exc
     if not isinstance(raw, dict):
         raise ChaoManifestError(f"{path}: manifest must be a JSON object")
     raw_instances = raw.get("instances", [])
@@ -152,11 +156,15 @@ def load_manifest(manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> tuple[di
             node_count = int(item.get("nodes", 0))
             vehicle_count = int(item.get("vehicles", 0))
             route_length_budget = (
-                float(item["route_length_budget"]) if item.get("route_length_budget") is not None else None
+                float(item["route_length_budget"])
+                if item.get("route_length_budget") is not None
+                else None
             )
             bks_value = float(bks) if bks is not None else None
         except (TypeError, ValueError) as exc:
-            raise ChaoManifestError(f"{path}: {instance_id} has a non-numeric field: {exc}") from exc
+            raise ChaoManifestError(
+                f"{path}: {instance_id} has a non-numeric field: {exc}"
+            ) from exc
         entries.append(
             ChaoInstanceMetadata(
                 instance_id=str(instance_id),
@@ -225,7 +233,9 @@ def get_instance_metadata(
     raise KeyError(f"Instance {instance_id!r} is not present in the benchmark manifest")
 
 
-def get_official_bks(instance_id: str, manifest_path: str | Path = DEFAULT_MANIFEST_PATH) -> float | None:
+def get_official_bks(
+    instance_id: str, manifest_path: str | Path = DEFAULT_MANIFEST_PATH
+) -> float | None:
     """Returns the authoritative BKS for an instance, or ``None`` when unavailable.
 
     Never falls back to a fabricated or derived score.
@@ -292,7 +302,9 @@ def load_instance(
     return context
 
 
-def load_chao_instance(filepath: str | Path, adapter: ChaoAdapterConfig = DEFAULT_CHAO_ADAPTER) -> InstanceContext:
+def load_chao_instance(
+    filepath: str | Path, adapter: ChaoAdapterConfig = DEFAULT_CHAO_ADAPTER
+) -> InstanceContext:
     """Loads a Chao benchmark instance directly from a file path (fixture or official)."""
     return build_instance_context(filepath, adapter=adapter)
 
@@ -309,7 +321,9 @@ def build_synthetic_nodes(set_name: str, total_nodes: int, seed: int = 12345) ->
     rng = np.random.default_rng(seed)
 
     nodes: list[TargetNode] = [
-        TargetNode(id=0, name="Depot-0", x=0.0, y=0.0, elevation=0.0, priority_score=0.0, dwell_time=0.0)
+        TargetNode(
+            id=0, name="Depot-0", x=0.0, y=0.0, elevation=0.0, priority_score=0.0, dwell_time=0.0
+        )
     ]
 
     if "64" in set_name:

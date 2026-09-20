@@ -19,10 +19,34 @@ def test_validator_passes_on_valid_schedule(mock_inst):
         drone_id=drone.id,
         target_ids=[1, 2],
         waypoints=[
-            WaypointVisit(node_id=0, arrival_time=0.0, departure_time=0.0, energy_consumed=0.0, remaining_battery_percent=100.0),
-            WaypointVisit(node_id=1, arrival_time=50.0, departure_time=80.0, energy_consumed=20000.0, remaining_battery_percent=94.4),
-            WaypointVisit(node_id=2, arrival_time=120.0, departure_time=150.0, energy_consumed=40000.0, remaining_battery_percent=88.8),
-            WaypointVisit(node_id=0, arrival_time=200.0, departure_time=200.0, energy_consumed=60000.0, remaining_battery_percent=83.3),
+            WaypointVisit(
+                node_id=0,
+                arrival_time=0.0,
+                departure_time=0.0,
+                energy_consumed=0.0,
+                remaining_battery_percent=100.0,
+            ),
+            WaypointVisit(
+                node_id=1,
+                arrival_time=50.0,
+                departure_time=80.0,
+                energy_consumed=20000.0,
+                remaining_battery_percent=94.4,
+            ),
+            WaypointVisit(
+                node_id=2,
+                arrival_time=120.0,
+                departure_time=150.0,
+                energy_consumed=40000.0,
+                remaining_battery_percent=88.8,
+            ),
+            WaypointVisit(
+                node_id=0,
+                arrival_time=200.0,
+                departure_time=200.0,
+                energy_consumed=60000.0,
+                remaining_battery_percent=83.3,
+            ),
         ],
         total_reward=50.0,
         total_flight_time=200.0,
@@ -52,9 +76,27 @@ def test_validator_detects_battery_violation(mock_inst):
         drone_id=drone.id,
         target_ids=[1],
         waypoints=[
-            WaypointVisit(node_id=0, arrival_time=0.0, departure_time=0.0, energy_consumed=0.0, remaining_battery_percent=100.0),
-            WaypointVisit(node_id=1, arrival_time=100.0, departure_time=130.0, energy_consumed=excessive_energy, remaining_battery_percent=5.0),
-            WaypointVisit(node_id=0, arrival_time=200.0, departure_time=200.0, energy_consumed=excessive_energy, remaining_battery_percent=5.0),
+            WaypointVisit(
+                node_id=0,
+                arrival_time=0.0,
+                departure_time=0.0,
+                energy_consumed=0.0,
+                remaining_battery_percent=100.0,
+            ),
+            WaypointVisit(
+                node_id=1,
+                arrival_time=100.0,
+                departure_time=130.0,
+                energy_consumed=excessive_energy,
+                remaining_battery_percent=5.0,
+            ),
+            WaypointVisit(
+                node_id=0,
+                arrival_time=200.0,
+                departure_time=200.0,
+                energy_consumed=excessive_energy,
+                remaining_battery_percent=5.0,
+            ),
         ],
         total_reward=25.0,
         total_flight_time=200.0,
@@ -92,9 +134,15 @@ def test_validator_detects_target_duplication(mock_inst):
         target_ids=[1, 2],
         waypoints=[
             WaypointVisit(node_id=0, arrival_time=0.0, departure_time=0.0, energy_consumed=0.0),
-            WaypointVisit(node_id=1, arrival_time=50.0, departure_time=80.0, energy_consumed=10000.0),
-            WaypointVisit(node_id=2, arrival_time=120.0, departure_time=150.0, energy_consumed=20000.0),
-            WaypointVisit(node_id=0, arrival_time=200.0, departure_time=200.0, energy_consumed=30000.0),
+            WaypointVisit(
+                node_id=1, arrival_time=50.0, departure_time=80.0, energy_consumed=10000.0
+            ),
+            WaypointVisit(
+                node_id=2, arrival_time=120.0, departure_time=150.0, energy_consumed=20000.0
+            ),
+            WaypointVisit(
+                node_id=0, arrival_time=200.0, departure_time=200.0, energy_consumed=30000.0
+            ),
         ],
         total_reward=50.0,
         total_flight_time=200.0,
@@ -105,9 +153,15 @@ def test_validator_detects_target_duplication(mock_inst):
         target_ids=[1, 3],  # Target 1 duplicate
         waypoints=[
             WaypointVisit(node_id=0, arrival_time=0.0, departure_time=0.0, energy_consumed=0.0),
-            WaypointVisit(node_id=1, arrival_time=50.0, departure_time=80.0, energy_consumed=10000.0),
-            WaypointVisit(node_id=3, arrival_time=120.0, departure_time=150.0, energy_consumed=20000.0),
-            WaypointVisit(node_id=0, arrival_time=200.0, departure_time=200.0, energy_consumed=30000.0),
+            WaypointVisit(
+                node_id=1, arrival_time=50.0, departure_time=80.0, energy_consumed=10000.0
+            ),
+            WaypointVisit(
+                node_id=3, arrival_time=120.0, departure_time=150.0, energy_consumed=20000.0
+            ),
+            WaypointVisit(
+                node_id=0, arrival_time=200.0, departure_time=200.0, energy_consumed=30000.0
+            ),
         ],
         total_reward=60.0,
         total_flight_time=200.0,
@@ -135,8 +189,15 @@ def test_validator_detects_deadline_violation(mock_inst):
         target_ids=[1],
         waypoints=[
             WaypointVisit(node_id=0, arrival_time=0.0, departure_time=0.0, energy_consumed=0.0),
-            WaypointVisit(node_id=1, arrival_time=1000.0, departure_time=1030.0, energy_consumed=10000.0),
-            WaypointVisit(node_id=0, arrival_time=drone.max_flight_time + 100.0, departure_time=drone.max_flight_time + 100.0, energy_consumed=20000.0),
+            WaypointVisit(
+                node_id=1, arrival_time=1000.0, departure_time=1030.0, energy_consumed=10000.0
+            ),
+            WaypointVisit(
+                node_id=0,
+                arrival_time=drone.max_flight_time + 100.0,
+                departure_time=drone.max_flight_time + 100.0,
+                energy_consumed=20000.0,
+            ),
         ],
         total_reward=25.0,
         total_flight_time=drone.max_flight_time + 100.0,
@@ -162,9 +223,15 @@ def test_validator_detects_depot_mismatch(mock_inst):
         drone_id=drone.id,
         target_ids=[1],
         waypoints=[
-            WaypointVisit(node_id=5, arrival_time=0.0, departure_time=0.0, energy_consumed=0.0),  # Not launch depot
-            WaypointVisit(node_id=1, arrival_time=50.0, departure_time=80.0, energy_consumed=10000.0),
-            WaypointVisit(node_id=0, arrival_time=120.0, departure_time=120.0, energy_consumed=20000.0),
+            WaypointVisit(
+                node_id=5, arrival_time=0.0, departure_time=0.0, energy_consumed=0.0
+            ),  # Not launch depot
+            WaypointVisit(
+                node_id=1, arrival_time=50.0, departure_time=80.0, energy_consumed=10000.0
+            ),
+            WaypointVisit(
+                node_id=0, arrival_time=120.0, departure_time=120.0, energy_consumed=20000.0
+            ),
         ],
         total_reward=25.0,
         total_flight_time=120.0,
@@ -191,9 +258,15 @@ def test_validator_detects_non_monotonic_timeline(mock_inst):
         target_ids=[1, 2],
         waypoints=[
             WaypointVisit(node_id=0, arrival_time=0.0, departure_time=0.0, energy_consumed=0.0),
-            WaypointVisit(node_id=1, arrival_time=100.0, departure_time=130.0, energy_consumed=20000.0),
-            WaypointVisit(node_id=2, arrival_time=90.0, departure_time=120.0, energy_consumed=15000.0),  # Decreasing time and energy
-            WaypointVisit(node_id=0, arrival_time=200.0, departure_time=200.0, energy_consumed=30000.0),
+            WaypointVisit(
+                node_id=1, arrival_time=100.0, departure_time=130.0, energy_consumed=20000.0
+            ),
+            WaypointVisit(
+                node_id=2, arrival_time=90.0, departure_time=120.0, energy_consumed=15000.0
+            ),  # Decreasing time and energy
+            WaypointVisit(
+                node_id=0, arrival_time=200.0, departure_time=200.0, energy_consumed=30000.0
+            ),
         ],
         total_reward=50.0,
         total_flight_time=200.0,

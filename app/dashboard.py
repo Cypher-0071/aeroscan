@@ -5,7 +5,6 @@ Autonomous UAV Swarm Coverage Optimization & Real-Time Mission Control.
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -30,7 +29,6 @@ from app.telemetry import (
     get_fleet_telemetry_at_time,
 )
 from app.visualizer import (
-    DRONE_COLORS,
     build_3d_terrain_mission_figure,
     build_battery_soc_figure,
     build_energy_breakdown_figure,
@@ -1181,11 +1179,17 @@ def load_initial_instance(
 def initialize_state():
     """Initializes default mission session state."""
     if "instance" not in st.session_state:
-        st.session_state.instance = load_initial_instance("Chao Set 64 (Clustered SAR)", 3, 3.5, 45.0)
+        st.session_state.instance = load_initial_instance(
+            "Chao Set 64 (Clustered SAR)", 3, 3.5, 45.0
+        )
     if "schedule" not in st.session_state:
         with st.spinner("Solving mission schedule..."):
-            pool = explore_route_pool(st.session_state.instance, max_iterations=150, time_limit_sec=0.8)
-            st.session_state.schedule = solve_fleet_schedule(st.session_state.instance, pool, run_baselines=True)
+            pool = explore_route_pool(
+                st.session_state.instance, max_iterations=150, time_limit_sec=0.8
+            )
+            st.session_state.schedule = solve_fleet_schedule(
+                st.session_state.instance, pool, run_baselines=True
+            )
     if "grasp_schedule" not in st.session_state:
         st.session_state.grasp_schedule = solve_grasp_baseline(st.session_state.instance)
     if "selected_inspector_obj" not in st.session_state:
@@ -1309,7 +1313,10 @@ with st.sidebar:
             sched = solve_fleet_schedule(inst, route_pool, run_baselines=True)
             st.session_state.schedule = sched
             st.session_state.grasp_schedule = solve_grasp_baseline(inst)
-            st.toast(f"Swarm solved: {sched.cumulative_reward:.0f} pts in {sched.solve_time_seconds:.2f}s", icon="✅")
+            st.toast(
+                f"Swarm solved: {sched.cumulative_reward:.0f} pts in {sched.solve_time_seconds:.2f}s",
+                icon="✅",
+            )
 
     if load_mock:
         mock_path = Path("tests/mock_schedule.json")
@@ -1361,7 +1368,7 @@ st.markdown(
             </div>
             <div class="tac-instrument">
                 <span class="tac-inst-lbl">ENERGY FLOOR</span>
-                <span class="tac-inst-val"><span class="energy-dot" style="background:{'#10B981' if min_reserve_header>=15 else '#EF4444'};"></span><b>{min_reserve_header:.1f}%</b> <small>MIN</small></span>
+                <span class="tac-inst-val"><span class="energy-dot" style="background:{"#10B981" if min_reserve_header >= 15 else "#EF4444"};"></span><b>{min_reserve_header:.1f}%</b> <small>MIN</small></span>
             </div>
             <div class="tac-status-badge">
                 <span class="live-dot-pulse"></span>
@@ -1398,7 +1405,7 @@ if "01 Operations Map" in workspace_choice:
             <div class="deck-header-row">
                 <div class="deck-title-col">
                     <span class="deck-title-text">FLIGHT TIMELINE // MISSION CHRONOLOGY</span>
-                    <span class="deck-time-badge">MET T+{curr_val:04.0f}s / {max_mission_time:04.0f}s ({frac_preview*100:04.1f}%)</span>
+                    <span class="deck-time-badge">MET T+{curr_val:04.0f}s / {max_mission_time:04.0f}s ({frac_preview * 100:04.1f}%)</span>
                 </div>
                 <div class="deck-title-col right">
                     <span class="deck-title-text">TACTICAL SENSOR MATRIX &amp; PROJECTION</span>
@@ -1530,7 +1537,11 @@ if "01 Operations Map" in workspace_choice:
     active_telem, secured_set = get_fleet_telemetry_at_time(schedule, t_current, instance)
     telem_by_id = {t["drone_id"]: t for t in active_telem}
 
-    inspector_options = ["None (Overview)"] + [d.id for d in instance.drones] + [f"Target #{t.id:02d}" for t in instance.target_nodes[:12]]
+    inspector_options = (
+        ["None (Overview)"]
+        + [d.id for d in instance.drones]
+        + [f"Target #{t.id:02d}" for t in instance.target_nodes[:12]]
+    )
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
     c_sel, _ = st.columns([2, 3])
     with c_sel:
@@ -1539,31 +1550,33 @@ if "01 Operations Map" in workspace_choice:
     if selected_obj != "None (Overview)":
         if selected_obj.startswith("UAV"):
             telem = telem_by_id.get(selected_obj, {})
-            u_route = next((r for r in schedule.assigned_routes if r.drone_id == selected_obj), None)
+            u_route = next(
+                (r for r in schedule.assigned_routes if r.drone_id == selected_obj), None
+            )
             cur_wp = telem.get("target_name", "DEPOT")
             st.markdown(
                 f"""
                 <div class="inspector-card">
                     <div class="inspector-header">
                         <span class="inspector-title">OBJECT INSPECTOR // {selected_obj}</span>
-                        <span class="uav-state-badge">{telem.get('flight_phase', 'CRUISE')}</span>
+                        <span class="uav-state-badge">{telem.get("flight_phase", "CRUISE")}</span>
                     </div>
                     <div class="inspector-grid">
                         <div class="inspector-stat">
                             <span class="insp-key">BATTERY SOC</span>
-                            <span class="insp-val" style="color: #10B981;">{telem.get('battery_percent', 100):.1f}%</span>
+                            <span class="insp-val" style="color: #10B981;">{telem.get("battery_percent", 100):.1f}%</span>
                         </div>
                         <div class="inspector-stat">
                             <span class="insp-key">GROUNDSPEED</span>
-                            <span class="insp-val">{telem.get('speed_mps', 0):.1f} m/s</span>
+                            <span class="insp-val">{telem.get("speed_mps", 0):.1f} m/s</span>
                         </div>
                         <div class="inspector-stat">
                             <span class="insp-key">ALTITUDE</span>
-                            <span class="insp-val">{telem.get('z', 60):.0f} m</span>
+                            <span class="insp-val">{telem.get("z", 60):.0f} m</span>
                         </div>
                         <div class="inspector-stat">
                             <span class="insp-key">HEADING</span>
-                            <span class="insp-val">{telem.get('heading_deg', 0):.0f}°</span>
+                            <span class="insp-val">{telem.get("heading_deg", 0):.0f}°</span>
                         </div>
                         <div class="inspector-stat">
                             <span class="insp-key">CURRENT WAYPOINT</span>
@@ -1571,7 +1584,7 @@ if "01 Operations Map" in workspace_choice:
                         </div>
                         <div class="inspector-stat">
                             <span class="insp-key">COORDINATES</span>
-                            <span class="insp-val">({telem.get('x', 0):.0f}, {telem.get('y', 0):.0f})</span>
+                            <span class="insp-val">({telem.get("x", 0):.0f}, {telem.get("y", 0):.0f})</span>
                         </div>
                         <div class="inspector-stat">
                             <span class="insp-key">TOTAL WAYPOINTS</span>
@@ -1666,7 +1679,7 @@ elif "02 Fleet Telemetry" in workspace_choice:
                 <span>ACTIVE: <b style="color:#0F172A;">01</b></span>
                 <span>STANDBY: <b style="color:#64748B;">02</b></span>
                 <span>AVG BATTERY: <b style="color:#10B981;">{avg_bat:.1f}%</b></span>
-                <span>TOTAL DIST: <b style="color:#0284C7;">{tot_dist/1000.0:.1f} KM</b></span>
+                <span>TOTAL DIST: <b style="color:#0284C7;">{tot_dist / 1000.0:.1f} KM</b></span>
             </div>
         </div>
         """,
@@ -1679,24 +1692,33 @@ elif "02 Fleet Telemetry" in workspace_choice:
     with c_left:
         st.markdown("##### Fleet Selector")
         drone_ids = [r.drone_id for r in schedule.assigned_routes]
-        selected_uav = st.radio("Active UAV", drone_ids, index=1 if len(drone_ids) > 1 else 0, label_visibility="collapsed")
+        selected_uav = st.radio(
+            "Active UAV",
+            drone_ids,
+            index=1 if len(drone_ids) > 1 else 0,
+            label_visibility="collapsed",
+        )
 
         # Compact summary cards in left column
         for idx, t in enumerate(telemetry_data):
-            is_active_uav = (t["drone_id"] == "UAV-02")
+            is_active_uav = t["drone_id"] == "UAV-02"
             border_cls = "border-left: 3px solid #0284C7;" if t["drone_id"] == selected_uav else ""
-            act_badge = "<span style='font-size:9px; background:#EFF6FF; color:#0284C7; padding:1px 5px; border-radius:3px; font-weight:700;'>CRUISE</span>" if is_active_uav else "<span style='font-size:9px; background:#F8FAFC; color:#64748B; padding:1px 5px; border-radius:3px;'>STANDBY</span>"
+            act_badge = (
+                "<span style='font-size:9px; background:#EFF6FF; color:#0284C7; padding:1px 5px; border-radius:3px; font-weight:700;'>CRUISE</span>"
+                if is_active_uav
+                else "<span style='font-size:9px; background:#F8FAFC; color:#64748B; padding:1px 5px; border-radius:3px;'>STANDBY</span>"
+            )
             st.markdown(
                 f"""
                 <div style="background:#FFFFFF; border:1px solid #E2E8F0; border-radius:6px; padding:10px 12px; margin-bottom:8px; {border_cls}">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <span style="font-weight:700; font-family:'JetBrains Mono'; font-size:12px; color:#0F172A;">{t['drone_id']}</span>
+                        <span style="font-weight:700; font-family:'JetBrains Mono'; font-size:12px; color:#0F172A;">{t["drone_id"]}</span>
                         {act_badge}
                     </div>
                     <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:11px; font-family:'JetBrains Mono'; color:#64748B;">
-                        <span>SoC: <b style="color:#10B981;">{t['battery_percent']:.0f}%</b></span>
-                        <span>Alt: {t['z']:.0f}m</span>
-                        <span>Spd: {t['speed_mps']:.1f}m/s</span>
+                        <span>SoC: <b style="color:#10B981;">{t["battery_percent"]:.0f}%</b></span>
+                        <span>Alt: {t["z"]:.0f}m</span>
+                        <span>Spd: {t["speed_mps"]:.1f}m/s</span>
                     </div>
                 </div>
                 """,
@@ -1705,12 +1727,16 @@ elif "02 Fleet Telemetry" in workspace_choice:
 
     with c_center:
         st.markdown(f"##### Kinematics Profile: `{selected_uav}` (Battery SoC & Altitude)")
-        fig_kin = build_uav_kinematics_figure(schedule, instance, selected_uav, current_time_sec=300.0)
+        fig_kin = build_uav_kinematics_figure(
+            schedule, instance, selected_uav, current_time_sec=300.0
+        )
         st.plotly_chart(fig_kin, use_container_width=True)
 
     with c_right:
         st.markdown(f"##### Avionics: `{selected_uav}`")
-        u_telem = next((t for t in telemetry_data if t["drone_id"] == selected_uav), telemetry_data[0])
+        u_telem = next(
+            (t for t in telemetry_data if t["drone_id"] == selected_uav), telemetry_data[0]
+        )
         st.markdown(
             f"""
             <div class="avionics-panel">
@@ -1720,23 +1746,23 @@ elif "02 Fleet Telemetry" in workspace_choice:
                 </div>
                 <div class="avionics-row">
                     <span class="avionics-key">FLIGHT PHASE</span>
-                    <span class="avionics-val" style="color:#0284C7;">{u_telem['flight_phase']}</span>
+                    <span class="avionics-val" style="color:#0284C7;">{u_telem["flight_phase"]}</span>
                 </div>
                 <div class="avionics-row">
                     <span class="avionics-key">GROUNDSPEED</span>
-                    <span class="avionics-val">{u_telem['speed_mps']:.1f} m/s</span>
+                    <span class="avionics-val">{u_telem["speed_mps"]:.1f} m/s</span>
                 </div>
                 <div class="avionics-row">
                     <span class="avionics-key">ALTITUDE (AGL)</span>
-                    <span class="avionics-val">{u_telem['z']:.0f} m</span>
+                    <span class="avionics-val">{u_telem["z"]:.0f} m</span>
                 </div>
                 <div class="avionics-row">
                     <span class="avionics-key">HEADING AZIMUTH</span>
-                    <span class="avionics-val">{u_telem.get('heading_deg', 0):.0f}°</span>
+                    <span class="avionics-val">{u_telem.get("heading_deg", 0):.0f}°</span>
                 </div>
                 <div class="avionics-row">
                     <span class="avionics-key">CURRENT TARGET</span>
-                    <span class="avionics-val">{u_telem.get('target_name', 'DEPOT')}</span>
+                    <span class="avionics-val">{u_telem.get("target_name", "DEPOT")}</span>
                 </div>
                 <div class="avionics-row">
                     <span class="avionics-key">COMM LINK RSSI</span>
@@ -1761,7 +1787,9 @@ elif "02 Fleet Telemetry" in workspace_choice:
             "x": st.column_config.NumberColumn("Easting X (m)", format="%.1f"),
             "y": st.column_config.NumberColumn("Northing Y (m)", format="%.1f"),
             "z": st.column_config.NumberColumn("Altitude Z (m)", format="%.1f"),
-            "battery_percent": st.column_config.ProgressColumn("Battery SoC", min_value=0, max_value=100, format="%.0f%%"),
+            "battery_percent": st.column_config.ProgressColumn(
+                "Battery SoC", min_value=0, max_value=100, format="%.0f%%"
+            ),
             "speed_mps": st.column_config.NumberColumn("Groundspeed (m/s)", format="%.1f"),
             "heading_deg": st.column_config.NumberColumn("Heading (°)", format="%.0f"),
             "status": "State Vector",
@@ -1815,13 +1843,17 @@ elif "04 Energy & Battery" in workspace_choice:
 
     b1, b2, b3, b4 = st.columns(4)
     with b1:
-        min_reserve_all = min((r.final_reserve_percent for r in schedule.assigned_routes), default=100.0)
+        min_reserve_all = min(
+            (r.final_reserve_percent for r in schedule.assigned_routes), default=100.0
+        )
         st.metric("Minimum Fleet Reserve", f"{min_reserve_all:.1f}%", "Above 15% Safety Floor")
     with b2:
         total_joules = sum(r.total_energy_joules for r in schedule.assigned_routes)
         st.metric("Total Swarm Energy", f"{total_joules / 1000.0:.1f} kJ", "Wind-Compensated")
     with b3:
-        avg_reserve = sum(r.final_reserve_percent for r in schedule.assigned_routes) / max(len(schedule.assigned_routes), 1)
+        avg_reserve = sum(r.final_reserve_percent for r in schedule.assigned_routes) / max(
+            len(schedule.assigned_routes), 1
+        )
         st.metric("Average Recovery Margin", f"{avg_reserve:.1f}%", "Optimal Land Margin")
     with b4:
         st.metric("Safety Reserve Floor", "15.0%", "Strict Constraint", delta_color="normal")

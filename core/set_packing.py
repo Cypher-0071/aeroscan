@@ -168,4 +168,3 @@ def solve_fleet_schedule(
     temp_sched.validation_passed = audit["valid"] and (status_str in ("OPTIMAL", "FEASIBLE"))
 
     return temp_sched
-

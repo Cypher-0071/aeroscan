@@ -16,9 +16,13 @@ def mock_inst():
 def test_grasp_baseline_execution(mock_inst):
     """Verify that GRASP runs cleanly in <0.2s and returns a valid schedule."""
     sched = solve_grasp_baseline(mock_inst, alpha=0.3, seed=42)
-    print(f"\n[GRASP Baseline] Latency: {sched.solve_time_seconds:.4f}s | Reward: {sched.cumulative_reward} | Status: {sched.status}")
+    print(
+        f"\n[GRASP Baseline] Latency: {sched.solve_time_seconds:.4f}s | Reward: {sched.cumulative_reward} | Status: {sched.status}"
+    )
     assert sched.status in ("FEASIBLE", "OPTIMAL")
-    assert sched.solve_time_seconds < 0.2, f"GRASP must complete in <0.2s, got {sched.solve_time_seconds:.4f}s"
+    assert sched.solve_time_seconds < 0.2, (
+        f"GRASP must complete in <0.2s, got {sched.solve_time_seconds:.4f}s"
+    )
     assert sched.cumulative_reward > 0.0
 
     # Ensure no constraint violations
@@ -29,7 +33,9 @@ def test_grasp_baseline_execution(mock_inst):
 def test_genetic_algorithm_baseline_execution(mock_inst):
     """Verify that GA baseline runs and returns a valid schedule."""
     sched = solve_genetic_algorithm(mock_inst, population_size=20, generations=15, seed=42)
-    print(f"\n[GA Baseline] Latency: {sched.solve_time_seconds:.4f}s | Reward: {sched.cumulative_reward} | Status: {sched.status}")
+    print(
+        f"\n[GA Baseline] Latency: {sched.solve_time_seconds:.4f}s | Reward: {sched.cumulative_reward} | Status: {sched.status}"
+    )
     assert sched.status in ("FEASIBLE", "OPTIMAL")
     assert sched.cumulative_reward > 0.0
 

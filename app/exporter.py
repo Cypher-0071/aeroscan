@@ -87,7 +87,9 @@ def export_mavlink_waypoint_file(
         alt = max(50.0, node.elevation)
         dwell = wp.departure_time - wp.arrival_time
         # INDEX, CURRENT_WP, COORD_FRAME, COMMAND, PARAM1, PARAM2, PARAM3, PARAM4, PARAM5/X/LAT, PARAM6/Y/LON, PARAM7/Z/ALT, AUTOCONTINUE
-        lines.append(f"{seq_idx}\t{'1' if seq_idx == 0 else '0'}\t3\t16\t{dwell:.1f}\t5.000000\t0.000000\t0.000000\t{lat:.7f}\t{lon:.7f}\t{alt:.2f}\t1")
+        lines.append(
+            f"{seq_idx}\t{'1' if seq_idx == 0 else '0'}\t3\t16\t{dwell:.1f}\t5.000000\t0.000000\t0.000000\t{lat:.7f}\t{lon:.7f}\t{alt:.2f}\t1"
+        )
 
     return "\n".join(lines)
 
@@ -104,18 +106,22 @@ def export_mission_telemetry_csv(
         for seq_idx, wp in enumerate(route.waypoints):
             node = node_map[wp.node_id]
             dwell = wp.departure_time - wp.arrival_time
-            rows.append({
-                "Drone_ID": route.drone_id,
-                "Waypoint_Seq": seq_idx,
-                "Node_ID": wp.node_id,
-                "Node_Name": node.name,
-                "Priority_Score": node.priority_score if seq_idx not in (0, len(route.waypoints) - 1) else 0.0,
-                "Arrival_Time_sec": round(wp.arrival_time, 2),
-                "Departure_Time_sec": round(wp.departure_time, 2),
-                "Dwell_Time_sec": round(dwell, 2),
-                "Energy_Burn_Joules": round(wp.energy_consumed, 1),
-                "Remaining_SoC_Percent": round(wp.remaining_battery_percent, 2),
-            })
+            rows.append(
+                {
+                    "Drone_ID": route.drone_id,
+                    "Waypoint_Seq": seq_idx,
+                    "Node_ID": wp.node_id,
+                    "Node_Name": node.name,
+                    "Priority_Score": node.priority_score
+                    if seq_idx not in (0, len(route.waypoints) - 1)
+                    else 0.0,
+                    "Arrival_Time_sec": round(wp.arrival_time, 2),
+                    "Departure_Time_sec": round(wp.departure_time, 2),
+                    "Dwell_Time_sec": round(dwell, 2),
+                    "Energy_Burn_Joules": round(wp.energy_consumed, 1),
+                    "Remaining_SoC_Percent": round(wp.remaining_battery_percent, 2),
+                }
+            )
 
     df = pd.DataFrame(rows)
     return df.to_csv(index=False)
@@ -126,7 +132,6 @@ def export_mission_dossier_html(
     instance: InstanceContext,
 ) -> str:
     """Generates a downloadable HTML Mission Flight Authorization & Clearance Dossier."""
-    node_map = {n.id: n for n in instance.targets}
     routes_html = ""
     for r in schedule.assigned_routes:
         routes_html += f"""

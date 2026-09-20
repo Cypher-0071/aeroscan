@@ -162,7 +162,9 @@ def validate_fleet(drones: list[DroneSpec], targets: list[TargetNode], source: s
         if not 0.0 <= drone.safety_reserve_ratio < 1.0:
             raise _fail(source, f"drone {drone.id!r} safety_reserve_ratio must be in [0, 1)")
         if drone.launch_depot_id not in valid_ids:
-            raise _fail(source, f"drone {drone.id!r} launch_depot_id {drone.launch_depot_id} not found")
+            raise _fail(
+                source, f"drone {drone.id!r} launch_depot_id {drone.launch_depot_id} not found"
+            )
         if drone.recovery_depot_id not in valid_ids:
             raise _fail(
                 source, f"drone {drone.id!r} recovery_depot_id {drone.recovery_depot_id} not found"
@@ -174,9 +176,13 @@ def _resolve_wind_direction(ambient: dict[str, Any], source: str) -> float:
     has_towards = "direction_degrees" in ambient
     has_from = "direction_from_degrees" in ambient
     if has_towards and has_from:
-        raise _fail(source, "ambient_wind cannot set both direction_degrees and direction_from_degrees")
+        raise _fail(
+            source, "ambient_wind cannot set both direction_degrees and direction_from_degrees"
+        )
     if has_from:
-        from_deg = _as_float(ambient["direction_from_degrees"], source, "ambient_wind.direction_from_degrees")
+        from_deg = _as_float(
+            ambient["direction_from_degrees"], source, "ambient_wind.direction_from_degrees"
+        )
         return (from_deg + 180.0) % 360.0
     if has_towards:
         return _as_float(ambient["direction_degrees"], source, "ambient_wind.direction_degrees")
@@ -190,9 +196,12 @@ def _parse_wind(data: dict[str, Any], source: str) -> tuple[float | None, float 
         direction = data.get("wind_direction_degrees")
         if speed is None and direction is None:
             return (None, None)
-        return (_as_float(speed if speed is not None else 0.0, source, "wind_speed_mps"), _as_float(
-            direction if direction is not None else 0.0, source, "wind_direction_degrees"
-        ))
+        return (
+            _as_float(speed if speed is not None else 0.0, source, "wind_speed_mps"),
+            _as_float(
+                direction if direction is not None else 0.0, source, "wind_direction_degrees"
+            ),
+        )
     ambient = _require_mapping(ambient, source, "ambient_wind")
     speed = _as_float(ambient.get("speed_mps", 0.0), source, "ambient_wind.speed_mps")
     if speed < 0:
@@ -243,7 +252,9 @@ def _coordinate_kind(record: dict[str, Any], source: str, index: int) -> str:
     if has_partial_xy:
         raise _fail(source, f"targets[{index}] must provide both x and y (meters), not just one")
     if not has_xy and not has_latlon:
-        raise _fail(source, f"targets[{index}] must provide either x/y (meters) or longitude/latitude")
+        raise _fail(
+            source, f"targets[{index}] must provide either x/y (meters) or longitude/latitude"
+        )
     return "latlon" if has_latlon else "xy"
 
 
@@ -263,8 +274,12 @@ def _target_from_record(
         lon_f = _as_float(lon, source, f"targets[{index}].longitude")
         lat_f = _as_float(lat, source, f"targets[{index}].latitude")
         if projection is None:
-            raise _fail(source, f"targets[{index}] uses geographic coordinates without a mission origin")
-        x, y = latlon_to_cartesian_meters(lat_f, lon_f, projection["origin_lat"], projection["origin_lon"])
+            raise _fail(
+                source, f"targets[{index}] uses geographic coordinates without a mission origin"
+            )
+        x, y = latlon_to_cartesian_meters(
+            lat_f, lon_f, projection["origin_lat"], projection["origin_lon"]
+        )
         projection.setdefault("crs", "wgs84-equirectangular")
     else:
         x = _as_float(record["x"], source, f"targets[{index}].x")
@@ -289,7 +304,9 @@ def _target_from_record(
         y=y,
         elevation=_as_float(record.get("elevation", 0.0), source, f"targets[{index}].elevation"),
         priority_score=_as_float(
-            record.get("priority_score", record.get("score", 0.0)), source, f"targets[{index}].priority_score"
+            record.get("priority_score", record.get("score", 0.0)),
+            source,
+            f"targets[{index}].priority_score",
         ),
         dwell_time=default_dwell,
     )
@@ -325,22 +342,33 @@ def _parse_geojson(data: dict[str, Any], source: str, name: str) -> ParsedInstan
         record["longitude"] = coords[0]
         record["latitude"] = coords[1]
         if "x" in record or "y" in record:
-            raise _fail(source, f"features[{idx}] cannot mix projected x/y with geographic coordinates")
+            raise _fail(
+                source, f"features[{idx}] cannot mix projected x/y with geographic coordinates"
+            )
         raw_records.append(record)
 
     # One origin/CRS per mission: the first feature defines the local frame unless
     # the mission explicitly declares an origin.
     declared_origin = data.get("origin")
     if isinstance(declared_origin, dict):
-        projection["origin_lat"] = _as_float(declared_origin.get("latitude"), source, "origin.latitude")
-        projection["origin_lon"] = _as_float(declared_origin.get("longitude"), source, "origin.longitude")
+        projection["origin_lat"] = _as_float(
+            declared_origin.get("latitude"), source, "origin.latitude"
+        )
+        projection["origin_lon"] = _as_float(
+            declared_origin.get("longitude"), source, "origin.longitude"
+        )
     else:
-        projection["origin_lat"] = _as_float(raw_records[0]["latitude"], source, "features[0].latitude")
-        projection["origin_lon"] = _as_float(raw_records[0]["longitude"], source, "features[0].longitude")
+        projection["origin_lat"] = _as_float(
+            raw_records[0]["latitude"], source, "features[0].latitude"
+        )
+        projection["origin_lon"] = _as_float(
+            raw_records[0]["longitude"], source, "features[0].longitude"
+        )
     projection["crs"] = "wgs84-equirectangular"
 
     targets = [
-        _target_from_record(record, source, idx, projection) for idx, record in enumerate(raw_records)
+        _target_from_record(record, source, idx, projection)
+        for idx, record in enumerate(raw_records)
     ]
     drones = _parse_drones(data, source)
     wind_speed, wind_dir = _parse_wind(data, source)
@@ -367,7 +395,9 @@ def _parse_mission_json(data: dict[str, Any], source: str, name: str) -> ParsedI
     if not raw_targets:
         raise _fail(source, "'targets' must not be empty")
 
-    records = [_require_mapping(raw, source, f"targets[{idx}]") for idx, raw in enumerate(raw_targets)]
+    records = [
+        _require_mapping(raw, source, f"targets[{idx}]") for idx, raw in enumerate(raw_targets)
+    ]
     kinds = [_coordinate_kind(record, source, idx) for idx, record in enumerate(records)]
 
     projection: dict[str, Any] | None = None
@@ -390,8 +420,14 @@ def _parse_mission_json(data: dict[str, Any], source: str, name: str) -> ParsedI
                 )
                 break
         if origin_lat is None or origin_lon is None:
-            raise _fail(source, "geographic targets require an origin (or one latitude/longitude target)")
-        projection = {"crs": "wgs84-equirectangular", "origin_lat": origin_lat, "origin_lon": origin_lon}
+            raise _fail(
+                source, "geographic targets require an origin (or one latitude/longitude target)"
+            )
+        projection = {
+            "crs": "wgs84-equirectangular",
+            "origin_lat": origin_lat,
+            "origin_lon": origin_lon,
+        }
 
     targets: list[TargetNode] = []
     for idx, record in enumerate(records):
@@ -422,7 +458,9 @@ def parse_json_mission(filepath: str | Path) -> ParsedInstance:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise _fail(source, f"invalid JSON at line {exc.lineno} column {exc.colno}: {exc.msg}") from exc
+        raise _fail(
+            source, f"invalid JSON at line {exc.lineno} column {exc.colno}: {exc.msg}"
+        ) from exc
     data = _require_mapping(raw, source, "top-level document")
 
     is_geojson = data.get("type") == "FeatureCollection" or "features" in data
@@ -436,7 +474,9 @@ def parse_json_mission(filepath: str | Path) -> ParsedInstance:
 # ---------------------------------------------------------------------------
 
 
-def parse_csv_targets(filepath: str | Path, sidecar: dict[str, Any] | None = None) -> ParsedInstance:
+def parse_csv_targets(
+    filepath: str | Path, sidecar: dict[str, Any] | None = None
+) -> ParsedInstance:
     """Parses a target table CSV plus optional mission sidecar metadata.
 
     Required columns: ``id``, ``priority_score`` and either ``x``/``y`` (meters) or
@@ -477,7 +517,9 @@ def parse_csv_targets(filepath: str | Path, sidecar: dict[str, Any] | None = Non
         record: dict[str, Any] = {"__row__": row_idx}
         record["id"] = _as_float(row.get(col("id")), source, f"row {row_idx} 'id'")
         record["priority_score"] = _as_float(
-            row.get(col("priority_score") or col("score")), source, f"row {row_idx} 'priority_score'"
+            row.get(col("priority_score") or col("score")),
+            source,
+            f"row {row_idx} 'priority_score'",
         )
         if has_xy:
             record["x"] = _as_float(row.get(col("x")), source, f"row {row_idx} 'x'")
@@ -492,10 +534,14 @@ def parse_csv_targets(filepath: str | Path, sidecar: dict[str, Any] | None = Non
         if col("name") is not None and row.get(col("name")):
             record["name"] = row[col("name")]
         if col("elevation") is not None and row.get(col("elevation")):
-            record["elevation"] = _as_float(row.get(col("elevation")), source, f"row {row_idx} 'elevation'")
+            record["elevation"] = _as_float(
+                row.get(col("elevation")), source, f"row {row_idx} 'elevation'"
+            )
         dwell_col = col("dwell_time") or col("dwell_time_seconds")
         if dwell_col is not None and row.get(dwell_col):
-            record["dwell_time"] = _as_float(row.get(dwell_col), source, f"row {row_idx} 'dwell_time'")
+            record["dwell_time"] = _as_float(
+                row.get(dwell_col), source, f"row {row_idx} 'dwell_time'"
+            )
         records.append(record)
 
     if not records:
@@ -510,7 +556,11 @@ def parse_csv_targets(filepath: str | Path, sidecar: dict[str, Any] | None = Non
         else:
             origin_lat = float(records[0]["latitude"])
             origin_lon = float(records[0]["longitude"])
-        projection = {"crs": "wgs84-equirectangular", "origin_lat": origin_lat, "origin_lon": origin_lon}
+        projection = {
+            "crs": "wgs84-equirectangular",
+            "origin_lat": origin_lat,
+            "origin_lon": origin_lon,
+        }
 
     targets: list[TargetNode] = []
     for idx, record in enumerate(records):
@@ -607,7 +657,9 @@ def parse_chao_txt(
             y = float(tokens[2])
             score = float(tokens[3])
         except ValueError as exc:
-            raise _fail(source, f"node record {offset + 1} has a non-numeric field: {line!r}") from exc
+            raise _fail(
+                source, f"node record {offset + 1} has a non-numeric field: {line!r}"
+            ) from exc
         is_depot = score == 0.0
         nodes.append(
             TargetNode(
@@ -617,7 +669,9 @@ def parse_chao_txt(
                 y=y,
                 elevation=adapter.depot_elevation_m if is_depot else adapter.target_elevation_m,
                 priority_score=score,
-                dwell_time=adapter.depot_dwell_time_seconds if is_depot else adapter.target_dwell_time_seconds,
+                dwell_time=adapter.depot_dwell_time_seconds
+                if is_depot
+                else adapter.target_dwell_time_seconds,
             )
         )
 
@@ -674,7 +728,9 @@ def parse_chao_txt(
 # ---------------------------------------------------------------------------
 
 
-def parse_instance_file(filepath: str | Path, adapter: ChaoAdapterConfig = DEFAULT_CHAO_ADAPTER) -> ParsedInstance:
+def parse_instance_file(
+    filepath: str | Path, adapter: ChaoAdapterConfig = DEFAULT_CHAO_ADAPTER
+) -> ParsedInstance:
     """Dispatches to the parser matching the file suffix.
 
     Raises ``ValueError`` listing supported suffixes for unknown formats.
@@ -700,7 +756,9 @@ def parse_instance_file(filepath: str | Path, adapter: ChaoAdapterConfig = DEFAU
         try:
             raw = json.loads(sidecar_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            raise _fail(str(sidecar_path), f"invalid JSON at line {exc.lineno} column {exc.colno}") from exc
+            raise _fail(
+                str(sidecar_path), f"invalid JSON at line {exc.lineno} column {exc.colno}"
+            ) from exc
         sidecar = _require_mapping(raw, str(sidecar_path), "top-level document")
     return parse_csv_targets(path, sidecar)
 

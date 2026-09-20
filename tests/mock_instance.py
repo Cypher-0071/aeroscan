@@ -57,7 +57,7 @@ def create_mock_instance(
 
     drones = [
         DroneSpec(
-            id=f"UAV-0{i+1}",
+            id=f"UAV-0{i + 1}",
             battery_joules=360000.0,  # 100 Wh
             safety_reserve_ratio=0.15,
             max_flight_time=2400.0,

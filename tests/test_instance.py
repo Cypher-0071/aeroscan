@@ -59,12 +59,16 @@ def test_latlon_to_cartesian_projection():
     assert y0 == pytest.approx(0.0, abs=1e-3)
 
     # 0.01 degree North (~1111 meters)
-    x_north, y_north = latlon_to_cartesian_meters(origin_lat + 0.01, origin_lon, origin_lat, origin_lon)
+    x_north, y_north = latlon_to_cartesian_meters(
+        origin_lat + 0.01, origin_lon, origin_lat, origin_lon
+    )
     assert x_north == pytest.approx(0.0, abs=1e-6)
     assert y_north == pytest.approx(1111.0, abs=25.0)
 
     # 0.01 degree East (~882 meters at this latitude), with no northward offset
-    x_east, y_east = latlon_to_cartesian_meters(origin_lat, origin_lon + 0.01, origin_lat, origin_lon)
+    x_east, y_east = latlon_to_cartesian_meters(
+        origin_lat, origin_lon + 0.01, origin_lat, origin_lon
+    )
     assert x_east == pytest.approx(879.0, abs=25.0)
     assert y_east == pytest.approx(0.0, abs=1e-6)
     assert x_east > 0.0
@@ -181,7 +185,11 @@ def test_target_mixing_coordinate_systems_rejected(tmp_path):
 
 def test_ambiguous_wind_direction_rejected(tmp_path):
     payload = _minimal_mission()
-    payload["ambient_wind"] = {"speed_mps": 2.0, "direction_degrees": 30.0, "direction_from_degrees": 10.0}
+    payload["ambient_wind"] = {
+        "speed_mps": 2.0,
+        "direction_degrees": 30.0,
+        "direction_from_degrees": 10.0,
+    }
     path = _write_mission(tmp_path, payload)
     with pytest.raises(ValueError, match="direction_degrees"):
         build_instance_context(path)
@@ -351,7 +359,7 @@ def test_parse_chao_instance_txt():
     assert len(inst.drones) == 3
     assert inst.time_matrix.shape == (64, 64)
     assert inst.targets[0].priority_score == 0.0  # Depot
-    assert inst.targets[1].priority_score > 0.0   # Target
+    assert inst.targets[1].priority_score > 0.0  # Target
 
 
 def test_chao_declared_count_mismatch(tmp_path):
@@ -363,18 +371,14 @@ def test_chao_declared_count_mismatch(tmp_path):
 
 def test_chao_duplicate_ids_rejected(tmp_path):
     path = tmp_path / "dup.txt"
-    path.write_text(
-        "3 1 600.0\n0 0.0 0.0 0.0\n1 1.0 1.0 5.0\n1 2.0 2.0 6.0\n", encoding="utf-8"
-    )
+    path.write_text("3 1 600.0\n0 0.0 0.0 0.0\n1 1.0 1.0 5.0\n1 2.0 2.0 6.0\n", encoding="utf-8")
     with pytest.raises(ValueError, match="duplicate node id"):
         parse_chao_txt(path)
 
 
 def test_chao_multiple_depots_rejected(tmp_path):
     path = tmp_path / "twodepots.txt"
-    path.write_text(
-        "3 1 600.0\n0 0.0 0.0 0.0\n1 1.0 1.0 0.0\n2 2.0 2.0 6.0\n", encoding="utf-8"
-    )
+    path.write_text("3 1 600.0\n0 0.0 0.0 0.0\n1 1.0 1.0 0.0\n2 2.0 2.0 6.0\n", encoding="utf-8")
     with pytest.raises(ValueError, match="exactly one depot"):
         parse_chao_txt(path)
 
@@ -447,9 +451,27 @@ def test_non_contiguous_node_ids_and_lookups():
     from core.operators import evaluate_route_trajectory
 
     targets = [
-        TargetNode(id=100, name="BaseCamp", x=0.0, y=0.0, elevation=0.0, priority_score=0.0, dwell_time=0.0),
-        TargetNode(id=205, name="Victim-1", x=100.0, y=100.0, elevation=10.0, priority_score=50.0, dwell_time=30.0),
-        TargetNode(id=309, name="Victim-2", x=200.0, y=200.0, elevation=10.0, priority_score=60.0, dwell_time=30.0),
+        TargetNode(
+            id=100, name="BaseCamp", x=0.0, y=0.0, elevation=0.0, priority_score=0.0, dwell_time=0.0
+        ),
+        TargetNode(
+            id=205,
+            name="Victim-1",
+            x=100.0,
+            y=100.0,
+            elevation=10.0,
+            priority_score=50.0,
+            dwell_time=30.0,
+        ),
+        TargetNode(
+            id=309,
+            name="Victim-2",
+            x=200.0,
+            y=200.0,
+            elevation=10.0,
+            priority_score=60.0,
+            dwell_time=30.0,
+        ),
     ]
     drone = DroneSpec(
         id="UAV-01",
@@ -458,11 +480,13 @@ def test_non_contiguous_node_ids_and_lookups():
         launch_depot_id=100,
         recovery_depot_id=100,
     )
-    time_mat = np.array([
-        [0.0, 10.0, 20.0],
-        [10.0, 0.0, 15.0],
-        [20.0, 15.0, 0.0],
-    ])
+    time_mat = np.array(
+        [
+            [0.0, 10.0, 20.0],
+            [10.0, 0.0, 15.0],
+            [20.0, 15.0, 0.0],
+        ]
+    )
     energy_mat = time_mat * 150.0
 
     inst = InstanceContext(

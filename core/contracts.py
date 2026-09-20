@@ -11,13 +11,14 @@ import numpy as np
 @dataclass
 class TargetNode:
     """Represents a target point of interest or depot location."""
-    id: int                     # 0..N-1 for targets, N..N+2K-1 for depots
-    name: str                   # Human-readable identifier
-    x: float                    # Metric X coordinate (meters, UTM or Cartesian)
-    y: float                    # Metric Y coordinate (meters, UTM or Cartesian)
-    elevation: float            # Altitude in meters
-    priority_score: float       # Search priority (0..100)
-    dwell_time: float           # Sensor inspection dwell in seconds (e.g. 30.0s)
+
+    id: int  # 0..N-1 for targets, N..N+2K-1 for depots
+    name: str  # Human-readable identifier
+    x: float  # Metric X coordinate (meters, UTM or Cartesian)
+    y: float  # Metric Y coordinate (meters, UTM or Cartesian)
+    elevation: float  # Altitude in meters
+    priority_score: float  # Search priority (0..100)
+    dwell_time: float  # Sensor inspection dwell in seconds (e.g. 30.0s)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -38,13 +39,14 @@ class TargetNode:
 @dataclass
 class DroneSpec:
     """Represents specifications of an Uncrewed Aerial Vehicle in the fleet."""
-    id: str                     # e.g., "UAV-01"
-    battery_joules: float       # Total usable battery capacity (Joules)
+
+    id: str  # e.g., "UAV-01"
+    battery_joules: float  # Total usable battery capacity (Joules)
     safety_reserve_ratio: float = 0.15  # Default 0.15 (15% reserve floor)
-    max_flight_time: float = 2400.0     # Hard flight deadline in seconds (e.g. 2400s)
-    cruise_speed: float = 14.5          # Airspeed in m/s (e.g. 14.5 m/s)
-    launch_depot_id: int = 0            # Node ID of launch base
-    recovery_depot_id: int = 0          # Node ID of landing base
+    max_flight_time: float = 2400.0  # Hard flight deadline in seconds (e.g. 2400s)
+    cruise_speed: float = 14.5  # Airspeed in m/s (e.g. 14.5 m/s)
+    launch_depot_id: int = 0  # Node ID of launch base
+    recovery_depot_id: int = 0  # Node ID of landing base
     model: str = "Standard-UAV"
 
     @property
@@ -61,7 +63,9 @@ class DroneSpec:
             id=str(data["id"]),
             battery_joules=float(data["battery_joules"]),
             safety_reserve_ratio=float(data.get("safety_reserve_ratio", 0.15)),
-            max_flight_time=float(data.get("max_flight_time", data.get("max_flight_time_seconds", 2400.0))),
+            max_flight_time=float(
+                data.get("max_flight_time", data.get("max_flight_time_seconds", 2400.0))
+            ),
             cruise_speed=float(data.get("cruise_speed", data.get("cruise_speed_mps", 14.5))),
             launch_depot_id=int(data.get("launch_depot_id", 0)),
             recovery_depot_id=int(data.get("recovery_depot_id", 0)),
@@ -72,13 +76,16 @@ class DroneSpec:
 @dataclass
 class InstanceContext:
     """Full mission scenario context including targets, fleet, and kinematic cost matrices."""
+
     instance_name: str
     targets: list[TargetNode]
     drones: list[DroneSpec]
-    time_matrix: np.ndarray     # Shape: [TotalNodes, TotalNodes], time in seconds (asymmetric)
-    energy_matrix: np.ndarray   # Shape: [TotalNodes, TotalNodes], energy in Joules (asymmetric)
+    time_matrix: np.ndarray  # Shape: [TotalNodes, TotalNodes], time in seconds (asymmetric)
+    energy_matrix: np.ndarray  # Shape: [TotalNodes, TotalNodes], energy in Joules (asymmetric)
     ambient_wind: tuple[float, float] = (0.0, 0.0)  # (speed_mps, direction_rad)
-    metadata: dict[str, Any] = field(default_factory=dict)  # CRS/projection provenance, wind, cruise speed
+    metadata: dict[str, Any] = field(
+        default_factory=dict
+    )  # CRS/projection provenance, wind, cruise speed
 
     @property
     def id_to_index(self) -> dict[int, int]:
@@ -107,7 +114,9 @@ class InstanceContext:
     @property
     def target_nodes(self) -> list[TargetNode]:
         """Returns only nodes with non-zero priority score or not designated solely as depots."""
-        depot_ids = {d.launch_depot_id for d in self.drones} | {d.recovery_depot_id for d in self.drones}
+        depot_ids = {d.launch_depot_id for d in self.drones} | {
+            d.recovery_depot_id for d in self.drones
+        }
         return [t for t in self.targets if t.id not in depot_ids and t.priority_score > 0]
 
     @property
@@ -118,10 +127,11 @@ class InstanceContext:
 @dataclass
 class WaypointVisit:
     """Chronological waypoint entry in a drone's flight trajectory."""
+
     node_id: int
-    arrival_time: float         # Continuous seconds from mission start
-    departure_time: float       # arrival_time + dwell_time
-    energy_consumed: float      # Cumulative energy consumed up to this point (Joules)
+    arrival_time: float  # Continuous seconds from mission start
+    departure_time: float  # arrival_time + dwell_time
+    energy_consumed: float  # Cumulative energy consumed up to this point (Joules)
     remaining_battery_percent: float = 100.0
 
     def to_dict(self) -> dict[str, Any]:
@@ -141,11 +151,12 @@ class WaypointVisit:
 @dataclass
 class CandidateRoute:
     """A feasible single-drone trajectory evaluated under physics constraints."""
-    drone_id: str               # Eligible drone identifier
-    target_ids: list[int]       # Visited target node IDs in sequence (excluding depots)
-    waypoints: list[WaypointVisit] # Full trajectory including launch and recovery depots
-    total_reward: float         # Sum of priority rewards of visited targets
-    total_flight_time: float    # Return time to recovery depot (seconds)
+
+    drone_id: str  # Eligible drone identifier
+    target_ids: list[int]  # Visited target node IDs in sequence (excluding depots)
+    waypoints: list[WaypointVisit]  # Full trajectory including launch and recovery depots
+    total_reward: float  # Sum of priority rewards of visited targets
+    total_flight_time: float  # Return time to recovery depot (seconds)
     total_energy_joules: float  # Total energy burn (must be <= 0.85 * battery_joules)
 
     @property
@@ -180,6 +191,7 @@ class CandidateRoute:
 @dataclass
 class RoutePool:
     """Pool of candidate feasible single-drone routes discovered by ALNS."""
+
     routes_by_drone: dict[str, list[CandidateRoute]] = field(default_factory=dict)
 
     @property
@@ -190,15 +202,16 @@ class RoutePool:
 @dataclass
 class FleetSchedule:
     """Global optimal schedule produced by CP-SAT Master Problem along with validation and baselines."""
-    status: str                 # "OPTIMAL", "FEASIBLE", or "INFEASIBLE"
-    solve_time_seconds: float   # Execution latency in seconds
-    cumulative_reward: float    # Sum of unique collected target rewards
-    assigned_routes: list[CandidateRoute] # Selected routes (at most 1 per drone)
-    unassigned_targets: list[int] # Target IDs not visited
-    validation_passed: bool     # True if 0% battery violation and 0% subtours
-    baseline_grasp_reward: float = 0.0 # Comparative GRASP baseline score
-    baseline_ga_reward: float = 0.0    # Comparative Genetic Algorithm score
-    reward_gain_percent: float = 0.0   # ((cumulative_reward - grasp_reward) / grasp_reward) * 100
+
+    status: str  # "OPTIMAL", "FEASIBLE", or "INFEASIBLE"
+    solve_time_seconds: float  # Execution latency in seconds
+    cumulative_reward: float  # Sum of unique collected target rewards
+    assigned_routes: list[CandidateRoute]  # Selected routes (at most 1 per drone)
+    unassigned_targets: list[int]  # Target IDs not visited
+    validation_passed: bool  # True if 0% battery violation and 0% subtours
+    baseline_grasp_reward: float = 0.0  # Comparative GRASP baseline score
+    baseline_ga_reward: float = 0.0  # Comparative Genetic Algorithm score
+    reward_gain_percent: float = 0.0  # ((cumulative_reward - grasp_reward) / grasp_reward) * 100
 
     def to_dict(self) -> dict[str, Any]:
         return {

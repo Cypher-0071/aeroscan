@@ -51,7 +51,9 @@ def build_mission_map_figure(
     """
     fig = go.Figure()
     node_map = {n.id: n for n in instance.targets}
-    depot_ids = {d.launch_depot_id for d in instance.drones} | {d.recovery_depot_id for d in instance.drones}
+    depot_ids = {d.launch_depot_id for d in instance.drones} | {
+        d.recovery_depot_id for d in instance.drones
+    }
 
     # Determine secured targets and active kinematics at current timestamp
     secured_targets: set[int] = set()
@@ -67,7 +69,9 @@ def build_mission_map_figure(
         if main_depot_id in node_map:
             center_node = node_map[main_depot_id]
             for r_dist in [300.0, 600.0, 1000.0, 1500.0]:
-                rx, ry = create_radar_circle(center_node.x, center_node.y, radius=r_dist, num_pts=64)
+                rx, ry = create_radar_circle(
+                    center_node.x, center_node.y, radius=r_dist, num_pts=64
+                )
                 fig.add_trace(
                     go.Scatter(
                         x=rx,
@@ -250,7 +254,10 @@ def build_mission_map_figure(
                 if wp.arrival_time <= current_time_sec:
                     crumbs_x.append(node.x)
                     crumbs_y.append(node.y)
-                elif i > 0 and route.waypoints[i - 1].departure_time < current_time_sec < wp.arrival_time:
+                elif (
+                    i > 0
+                    and route.waypoints[i - 1].departure_time < current_time_sec < wp.arrival_time
+                ):
                     prev_node = node_map[route.waypoints[i - 1].node_id]
                     frac = (current_time_sec - route.waypoints[i - 1].departure_time) / max(
                         wp.arrival_time - route.waypoints[i - 1].departure_time, 1e-4
@@ -349,7 +356,10 @@ def build_mission_map_figure(
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#F8FAFC",
         xaxis=dict(
-            title=dict(text="EASTING X (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            title=dict(
+                text="EASTING X (M)",
+                font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace"),
+            ),
             gridcolor="#E2E8F0",
             zerolinecolor="#CBD5E1",
             showgrid=True,
@@ -357,7 +367,10 @@ def build_mission_map_figure(
             tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
         ),
         yaxis=dict(
-            title=dict(text="NORTHING Y (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            title=dict(
+                text="NORTHING Y (M)",
+                font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace"),
+            ),
             gridcolor="#E2E8F0",
             zerolinecolor="#CBD5E1",
             scaleanchor="x",
@@ -394,7 +407,9 @@ def build_3d_terrain_mission_figure(
     """
     fig = go.Figure()
     node_map = {n.id: n for n in instance.targets}
-    depot_ids = {d.launch_depot_id for d in instance.drones} | {d.recovery_depot_id for d in instance.drones}
+    depot_ids = {d.launch_depot_id for d in instance.drones} | {
+        d.recovery_depot_id for d in instance.drones
+    }
 
     # 1. Target nodes in 3D
     targets = instance.target_nodes
@@ -565,7 +580,10 @@ def build_battery_soc_figure(
                 mode="lines",
                 name=f"{drone_id}",
                 line=dict(color=color, width=2.5),
-                hovertext=[f"<b>{drone_id}</b>: {val:.1f}% SoC at {int(t)}s" for val, t in zip(df[col], df["Time_sec"])],
+                hovertext=[
+                    f"<b>{drone_id}</b>: {val:.1f}% SoC at {int(t)}s"
+                    for val, t in zip(df[col], df["Time_sec"])
+                ],
                 hoverinfo="text",
             )
         )
@@ -600,13 +618,19 @@ def build_battery_soc_figure(
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#F8FAFC",
         xaxis=dict(
-            title=dict(text="MISSION TIME (SEC)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            title=dict(
+                text="MISSION TIME (SEC)",
+                font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace"),
+            ),
             gridcolor="#E2E8F0",
             showgrid=True,
             tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
         ),
         yaxis=dict(
-            title=dict(text="BATTERY SOC (%)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            title=dict(
+                text="BATTERY SOC (%)",
+                font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace"),
+            ),
             range=[0, 105],
             gridcolor="#E2E8F0",
             showgrid=True,
@@ -711,7 +735,10 @@ def build_uav_kinematics_figure(
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#F8FAFC",
         xaxis=dict(
-            title=dict(text="MISSION TIME (SEC)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            title=dict(
+                text="MISSION TIME (SEC)",
+                font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace"),
+            ),
             gridcolor="#E2E8F0",
             showgrid=True,
             tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
@@ -789,7 +816,10 @@ def build_energy_breakdown_figure() -> go.Figure:
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#FFFFFF",
         xaxis=dict(
-            title=dict(text="POWER ALLOCATION (%)", font=dict(color="#64748B", size=10, family="JetBrains Mono")),
+            title=dict(
+                text="POWER ALLOCATION (%)",
+                font=dict(color="#64748B", size=10, family="JetBrains Mono"),
+            ),
             range=[0, 100],
             gridcolor="#E2E8F0",
             tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),

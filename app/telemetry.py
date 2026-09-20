@@ -35,7 +35,9 @@ def interpolate_drone_state(
     wind_spd, wind_dir_rad = instance.ambient_wind
 
     # Baseline nominal power calculation from drone battery & flight endurance
-    nominal_power = getattr(drone, "battery_joules", 360000.0) / max(getattr(drone, "max_flight_time", 2400.0), 1.0)
+    nominal_power = getattr(drone, "battery_joules", 360000.0) / max(
+        getattr(drone, "max_flight_time", 2400.0), 1.0
+    )
 
     if not waypoints:
         launch = node_map.get(drone.launch_depot_id, instance.targets[0])

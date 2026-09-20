@@ -42,7 +42,9 @@ def audit_fleet_schedule(
         # 1. Battery Reserve Check (E_total <= 0.85 * B_k <=> Remaining SoC >= 15.0%)
         max_allowed_energy = drone.usable_battery_joules
         if route.total_energy_joules > max_allowed_energy + 1e-4:
-            rem_pct = ((drone.battery_joules - route.total_energy_joules) / drone.battery_joules) * 100.0
+            rem_pct = (
+                (drone.battery_joules - route.total_energy_joules) / drone.battery_joules
+            ) * 100.0
             violations.append(
                 f"Fatal: Battery safety margin breached: Battery reserve violation on {drone.id}: "
                 f"consumed {route.total_energy_joules:.1f} J (max allowed {max_allowed_energy:.1f} J). "
@@ -126,6 +128,8 @@ def validate_fleet_schedule(schedule: FleetSchedule, instance: InstanceContext) 
     """
     audit = audit_fleet_schedule(schedule, instance)
     if not audit["valid"]:
-        error_msg = "Constraint validation failed with violations:\n" + "\n".join(audit["violations"])
+        error_msg = "Constraint validation failed with violations:\n" + "\n".join(
+            audit["violations"]
+        )
         raise ScheduleValidationError(error_msg)
     return True

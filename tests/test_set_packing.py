@@ -23,7 +23,9 @@ def test_set_packing_feasibility(mock_inst, mock_pool):
         mock_inst, mock_pool, time_limit_seconds=0.5
     )
 
-    print(f"\n[CP-SAT] Latency: {latency:.4f}s | Status: {status} | Reward: {total_reward} | Routes: {len(assigned_routes)}")
+    print(
+        f"\n[CP-SAT] Latency: {latency:.4f}s | Status: {status} | Reward: {total_reward} | Routes: {len(assigned_routes)}"
+    )
     assert status in ("OPTIMAL", "FEASIBLE")
     assert latency < 0.5  # Sub-second latency guarantee
     assert len(assigned_routes) <= len(mock_inst.drones)
@@ -32,10 +34,13 @@ def test_set_packing_feasibility(mock_inst, mock_pool):
     visited_all = []
     for route in assigned_routes:
         visited_all.extend(route.target_ids)
-    assert len(visited_all) == len(set(visited_all)), "CP-SAT must produce non-overlapping target assignments"
+    assert len(visited_all) == len(set(visited_all)), (
+        "CP-SAT must produce non-overlapping target assignments"
+    )
 
     # Edge case 1: Empty RoutePool
     from core.contracts import CandidateRoute, RoutePool
+
     empty_pool = RoutePool()
     st_e, as_e, un_e, lat_e, rew_e = solve_set_packing(mock_inst, empty_pool)
     assert st_e in ("OPTIMAL", "FEASIBLE")
@@ -68,9 +73,7 @@ def test_set_packing_feasibility(mock_inst, mock_pool):
 
     # Edge case 4: Zero-reward routes
     zero_pool = RoutePool(
-        routes_by_drone={
-            "UAV-01": [CandidateRoute("UAV-01", [1], [], 0.0, 100.0, 5000.0)]
-        }
+        routes_by_drone={"UAV-01": [CandidateRoute("UAV-01", [1], [], 0.0, 100.0, 5000.0)]}
     )
     st_z, as_z, _, _, rew_z = solve_set_packing(mock_inst, zero_pool)
     assert st_z in ("OPTIMAL", "FEASIBLE")
@@ -96,6 +99,7 @@ def test_solve_fleet_schedule_end_to_end(mock_inst, mock_pool):
 
     # Edge case: Empty pool must not crash solve_fleet_schedule
     from core.contracts import RoutePool
+
     empty_sched = solve_fleet_schedule(mock_inst, RoutePool(), run_baselines=False)
     assert empty_sched.status in ("OPTIMAL", "FEASIBLE")
     assert empty_sched.cumulative_reward == 0.0

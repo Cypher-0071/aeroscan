@@ -64,7 +64,9 @@ class DroneAeroParams:
     # ``avionics_power_w`` is the *hover* draw and includes the gimbal LIDAR and
     # the sensor payload, matching the PRD's P_avionics + P_sensor term.
     avionics_power_w: float = 45.0  # Hover inspection draw (avionics + LIDAR/sensor payload)
-    cruise_avionics_power_w: float = 10.0  # Forward cruise avionics draw (sensors in transit standby)
+    cruise_avionics_power_w: float = (
+        10.0  # Forward cruise avionics draw (sensors in transit standby)
+    )
 
 
 @dataclass(frozen=True)
@@ -94,7 +96,9 @@ def validate_aero_params(params: DroneAeroParams) -> None:
     if params.blade_drag_coeff <= 0:
         raise ValueError(f"blade_drag_coeff must be positive, got {params.blade_drag_coeff!r}")
     if params.hover_tip_speed_mps <= 0:
-        raise ValueError(f"hover_tip_speed_mps must be positive, got {params.hover_tip_speed_mps!r}")
+        raise ValueError(
+            f"hover_tip_speed_mps must be positive, got {params.hover_tip_speed_mps!r}"
+        )
     if params.tip_speed_mps <= 0:
         raise ValueError(f"tip_speed_mps must be positive, got {params.tip_speed_mps!r}")
     if params.body_drag_coeff < 0:
@@ -155,9 +159,7 @@ def calculate_hover_power(params: DroneAeroParams | None = None) -> float:
     return hover_power_breakdown(params).total_w
 
 
-def calculate_cruise_power(
-    airspeed_mps: float, params: DroneAeroParams | None = None
-) -> float:
+def calculate_cruise_power(airspeed_mps: float, params: DroneAeroParams | None = None) -> float:
     """Computes forward flight cruise power draw in Watts using forward flight drag polars.
 
     P_cruise(V) = P_0 * (1 + 3 * V^2 / V_tip^2)
@@ -202,17 +204,13 @@ def calculate_cruise_power(
     term_induced = p_i * math.sqrt(max(0.0, inner))
 
     # Parasitic fuselage drag
-    term_parasitic = (
-        0.5 * p.air_density_kgpm3 * p.body_drag_coeff * p.body_frontal_area_m2 * (v**3)
-    )
+    term_parasitic = 0.5 * p.air_density_kgpm3 * p.body_drag_coeff * p.body_frontal_area_m2 * (v**3)
 
     total_power = term_profile + term_induced + term_parasitic + p.cruise_avionics_power_w
     return float(total_power)
 
 
-def energy_per_distance(
-    airspeed_mps: float, params: DroneAeroParams | None = None
-) -> float:
+def energy_per_distance(airspeed_mps: float, params: DroneAeroParams | None = None) -> float:
     """Returns cruise energy per meter (J/m) at ``airspeed_mps``.
 
     Raises ``ValueError`` for non-positive airspeeds: a stationary aircraft has no
@@ -310,9 +308,7 @@ def resolve_groundspeed(
     return (float(vg), float(dist / vg))
 
 
-def compute_dwell_energy(
-    dwell_time_seconds: float, params: DroneAeroParams | None = None
-) -> float:
+def compute_dwell_energy(dwell_time_seconds: float, params: DroneAeroParams | None = None) -> float:
     """Computes total energy in Joules consumed during static inspection dwell.
 
     This is the single source of truth for dwell energy; it is intentionally kept

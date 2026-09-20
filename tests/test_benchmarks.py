@@ -241,7 +241,10 @@ def test_run_single_benchmark_records_failures_instead_of_hiding_them(monkeypatc
 
 
 def test_run_single_benchmark_counts_battery_violations(stub_pipeline):
-    stub_pipeline["violations"] = ["Battery reserve violation on UAV-01", "Deadline violation on UAV-02"]
+    stub_pipeline["violations"] = [
+        "Battery reserve violation on UAV-01",
+        "Deadline violation on UAV-02",
+    ]
     inst = get_synthetic_instance("set_64", num_drones=2)
     result = run_single_benchmark(inst)
 
@@ -255,7 +258,9 @@ def test_run_single_benchmark_counts_battery_violations(stub_pipeline):
 # ---------------------------------------------------------------------------
 
 
-def _row(instance_id: str, *, completed=True, bks=None, gap=None, latency=1.0, violations=0) -> BenchmarkResult:
+def _row(
+    instance_id: str, *, completed=True, bks=None, gap=None, latency=1.0, violations=0
+) -> BenchmarkResult:
     return BenchmarkResult(
         instance_id=instance_id,
         source="test",

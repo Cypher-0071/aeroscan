@@ -373,7 +373,9 @@ class BenchmarkReport:
     def to_dataframe(self) -> pd.DataFrame:
         return pd.DataFrame([row.to_dict() for row in self.rows])
 
-    def write(self, csv_path: str | Path | None = None, json_path: str | Path | None = None) -> None:
+    def write(
+        self, csv_path: str | Path | None = None, json_path: str | Path | None = None
+    ) -> None:
         """Writes a deterministic CSV and/or a JSON sidecar with config and summary."""
         if csv_path is not None:
             csv_out = Path(csv_path)
@@ -479,7 +481,9 @@ def run_benchmark_suite(config: BenchmarkConfig | None = None) -> BenchmarkRepor
         entries = [e for e in entries if e.vehicle_count in config.fleet_sizes]
 
     if not entries:
-        notes.append("No official instances matched the configuration; no solver work was performed.")
+        notes.append(
+            "No official instances matched the configuration; no solver work was performed."
+        )
         return _run_entries([], config, notes, corpus=status)
 
     loaded: list[tuple[InstanceContext, ChaoInstanceMetadata | None]] = []

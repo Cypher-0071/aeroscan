@@ -19,7 +19,7 @@ from core.contracts import (
     InstanceContext,
     WaypointVisit,
 )
-from core.operators import evaluate_route_trajectory
+from core.operators import EvaluatorContext, evaluate_route_trajectory
 
 
 def solve_grasp_single_drone(
@@ -36,33 +36,39 @@ def solve_grasp_single_drone(
     pool = set(available_targets)
 
     node_map = {n.id: n for n in instance.targets}
+    evaluator = EvaluatorContext(drone, instance)
+    curr_e, curr_t, _ = evaluator.compute_route_totals(current_route)
+    usable_energy = drone.usable_battery_joules
+    max_time = drone.max_flight_time
 
     while pool:
-        candidates: list[tuple[float, int, int]] = []  # (efficiency, target_id, slot)
+        candidates: list[
+            tuple[float, int, int, float, float]
+        ] = []  # (efficiency, target_id, slot, delta_e, delta_t)
         for tid in list(pool):
             node = node_map.get(tid)
             if not node:
                 continue
             for slot in range(len(current_route) + 1):
                 pred_id = current_route[slot - 1] if slot > 0 else drone.launch_depot_id
-                succ_id = current_route[slot] if slot < len(current_route) else drone.recovery_depot_id
+                succ_id = (
+                    current_route[slot] if slot < len(current_route) else drone.recovery_depot_id
+                )
                 pred_node = node_map.get(pred_id)
                 succ_node = node_map.get(succ_id)
                 if not pred_node or not succ_node:
                     continue
 
                 curr_dist = math.hypot(succ_node.x - pred_node.x, succ_node.y - pred_node.y)
-                new_dist = (
-                    math.hypot(node.x - pred_node.x, node.y - pred_node.y)
-                    + math.hypot(succ_node.x - node.x, succ_node.y - node.y)
+                new_dist = math.hypot(node.x - pred_node.x, node.y - pred_node.y) + math.hypot(
+                    succ_node.x - node.x, succ_node.y - node.y
                 )
                 delta_dist = max(1.0, new_dist - curr_dist)
 
-                test_seq = current_route[:slot] + [tid] + current_route[slot:]
-                eval_res = evaluate_route_trajectory(test_seq, drone, instance)
-                if eval_res is not None:
+                delta_e, delta_t = evaluator.compute_delta(pred_id, tid, succ_id)
+                if curr_e + delta_e <= usable_energy and curr_t + delta_t <= max_time:
                     efficiency = node.priority_score / delta_dist
-                    candidates.append((efficiency, tid, slot))
+                    candidates.append((efficiency, tid, slot, delta_e, delta_t))
 
         if not candidates:
             break
@@ -73,12 +79,14 @@ def solve_grasp_single_drone(
         threshold = max_eff - alpha * (max_eff - min_eff)
 
         rcl = [c for c in candidates if c[0] >= threshold]
-        chosen_eff, chosen_tid, chosen_slot = random.choice(rcl)
+        chosen_eff, chosen_tid, chosen_slot, chosen_de, chosen_dt = random.choice(rcl)
 
         current_route.insert(chosen_slot, chosen_tid)
         pool.remove(chosen_tid)
+        curr_e += chosen_de
+        curr_t += chosen_dt
 
-    eval_final = evaluate_route_trajectory(current_route, drone, instance)
+    eval_final = evaluate_route_trajectory(current_route, drone, instance, evaluator=evaluator)
     if eval_final is None:
         eval_final = evaluate_route_trajectory([], drone, instance)
     if eval_final is None:

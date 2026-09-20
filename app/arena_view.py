@@ -18,7 +18,9 @@ def build_comparison_map(
     """Builds a clean light-theme tactical route trajectory map without internal title collisions."""
     fig = go.Figure()
     node_map = {n.id: n for n in instance.targets}
-    depot_ids = {d.launch_depot_id for d in instance.drones} | {d.recovery_depot_id for d in instance.drones}
+    depot_ids = {d.launch_depot_id for d in instance.drones} | {
+        d.recovery_depot_id for d in instance.drones
+    }
 
     # Targets
     target_nodes = list(instance.target_nodes)
@@ -39,7 +41,9 @@ def build_comparison_map(
                 marker=dict(size=6, color="#94A3B8", opacity=0.7),
                 name="Unvisited",
                 hoverinfo="text",
-                hovertext=[f"Target #{t.id:02d}: {t.priority_score:.0f} pts (Unvisited)" for t in unvisited],
+                hovertext=[
+                    f"Target #{t.id:02d}: {t.priority_score:.0f} pts (Unvisited)" for t in unvisited
+                ],
             )
         )
 
@@ -56,7 +60,9 @@ def build_comparison_map(
                 ),
                 name="Secured Target",
                 hoverinfo="text",
-                hovertext=[f"Secured Target #{t.id:02d}: {t.priority_score:.0f} pts" for t in visited],
+                hovertext=[
+                    f"Secured Target #{t.id:02d}: {t.priority_score:.0f} pts" for t in visited
+                ],
             )
         )
 
@@ -68,7 +74,9 @@ def build_comparison_map(
                 x=[d.x for d in depots],
                 y=[d.y for d in depots],
                 mode="markers",
-                marker=dict(size=14, symbol="diamond", color="#0284C7", line=dict(color="#FFFFFF", width=2)),
+                marker=dict(
+                    size=14, symbol="diamond", color="#0284C7", line=dict(color="#FFFFFF", width=2)
+                ),
                 name="Base Station",
                 hoverinfo="text",
                 hovertext=[f"Base Depot: {d.name}" for d in depots],
@@ -92,7 +100,9 @@ def build_comparison_map(
                 marker=dict(size=4, color=color),
                 name=f"{route.drone_id}",
                 hoverinfo="text",
-                hovertext=[f"{route.drone_id} -> {node_map[wp.node_id].name}" for wp in route.waypoints],
+                hovertext=[
+                    f"{route.drone_id} -> {node_map[wp.node_id].name}" for wp in route.waypoints
+                ],
             )
         )
 
@@ -138,7 +148,9 @@ def build_differential_overlay_map(
     """Builds a single-canvas differential comparison overlay showing both algorithms' routes."""
     fig = go.Figure()
     node_map = {n.id: n for n in instance.targets}
-    depot_ids = {d.launch_depot_id for d in instance.drones} | {d.recovery_depot_id for d in instance.drones}
+    depot_ids = {d.launch_depot_id for d in instance.drones} | {
+        d.recovery_depot_id for d in instance.drones
+    }
 
     # Depots
     depots = [node_map[did] for did in depot_ids if did in node_map]
@@ -148,7 +160,9 @@ def build_differential_overlay_map(
                 x=[d.x for d in depots],
                 y=[d.y for d in depots],
                 mode="markers",
-                marker=dict(size=14, symbol="diamond", color="#0284C7", line=dict(color="#FFFFFF", width=2)),
+                marker=dict(
+                    size=14, symbol="diamond", color="#0284C7", line=dict(color="#FFFFFF", width=2)
+                ),
                 name="Base Station",
                 hoverinfo="text",
                 hovertext=[f"Base Depot: {d.name}" for d in depots],
@@ -170,7 +184,10 @@ def build_differential_overlay_map(
                 name=f"GRASP {route.drone_id}",
                 opacity=0.6,
                 hoverinfo="text",
-                hovertext=[f"GRASP {route.drone_id} -> {node_map[wp.node_id].name}" for wp in route.waypoints],
+                hovertext=[
+                    f"GRASP {route.drone_id} -> {node_map[wp.node_id].name}"
+                    for wp in route.waypoints
+                ],
             )
         )
 
@@ -189,7 +206,10 @@ def build_differential_overlay_map(
                 marker=dict(size=4, color="#0284C7"),
                 name=f"AeroScan {route.drone_id}",
                 hoverinfo="text",
-                hovertext=[f"AeroScan {route.drone_id} -> {node_map[wp.node_id].name}" for wp in route.waypoints],
+                hovertext=[
+                    f"AeroScan {route.drone_id} -> {node_map[wp.node_id].name}"
+                    for wp in route.waypoints
+                ],
             )
         )
 
@@ -198,14 +218,18 @@ def build_differential_overlay_map(
         paper_bgcolor="#FFFFFF",
         plot_bgcolor="#F8FAFC",
         xaxis=dict(
-            title=dict(text="EASTING X (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono")),
+            title=dict(
+                text="EASTING X (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono")
+            ),
             showgrid=True,
             gridcolor="#E2E8F0",
             zeroline=False,
             tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
         ),
         yaxis=dict(
-            title=dict(text="NORTHING Y (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono")),
+            title=dict(
+                text="NORTHING Y (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono")
+            ),
             showgrid=True,
             gridcolor="#E2E8F0",
             scaleanchor="x",
@@ -265,12 +289,19 @@ def render_arena_view(
     c_filt, c_mode = st.columns([1.5, 2.5])
     with c_filt:
         drone_options = ["All UAVs (Fleet View)"] + [d.id for d in instance.drones]
-        sel_choice = st.selectbox("Trajectory Inspection", drone_options, index=0, label_visibility="collapsed")
+        sel_choice = st.selectbox(
+            "Trajectory Inspection", drone_options, index=0, label_visibility="collapsed"
+        )
         selected_drone = None if sel_choice == "All UAVs (Fleet View)" else sel_choice
     with c_mode:
         view_compare_mode = st.radio(
             "Comparison Mode",
-            ["Side-by-Side Arena", "Differential Overlay", "AeroScan Route Only", "GRASP Route Only"],
+            [
+                "Side-by-Side Arena",
+                "Differential Overlay",
+                "AeroScan Route Only",
+                "GRASP Route Only",
+            ],
             horizontal=True,
             label_visibility="collapsed",
         )
@@ -315,7 +346,7 @@ def render_arena_view(
 
     elif view_compare_mode == "Differential Overlay":
         st.markdown(
-            f"""
+            """
             <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
                 <span style="font-size: 12px; font-weight: 700; color: #0284C7; font-family: 'JetBrains Mono', monospace;">DIFFERENTIAL TRAJECTORY OVERLAY</span>
                 <span style="font-size: 12px; color: #64748B; font-family: 'JetBrains Mono', monospace;">
@@ -373,9 +404,17 @@ def render_arena_view(
     st.markdown("<div style='height: 12px'></div>", unsafe_allow_html=True)
     m1, m2, m3, m4 = st.columns(4)
     with m1:
-        st.metric("Total Secured Reward", f"{aeroscan_schedule.cumulative_reward:.0f} pts", f"+{pct_gain:.1f}% vs GRASP")
+        st.metric(
+            "Total Secured Reward",
+            f"{aeroscan_schedule.cumulative_reward:.0f} pts",
+            f"+{pct_gain:.1f}% vs GRASP",
+        )
     with m2:
-        st.metric("Targets Secured", f"{targets_opt} / {len(instance.target_nodes)}", f"{delta_targets:+d} targets secured")
+        st.metric(
+            "Targets Secured",
+            f"{targets_opt} / {len(instance.target_nodes)}",
+            f"{delta_targets:+d} targets secured",
+        )
     with m3:
         st.metric("Solve Latency", f"{aeroscan_schedule.solve_time_seconds:.3f}s", "ALNS + CP-SAT")
     with m4:

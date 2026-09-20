@@ -90,9 +90,13 @@ def test_cruise_power_efficiency():
     assert 12.0 <= v_br <= 18.0, f"V_br {v_br:.1f} m/s outside aerodynamic envelope"
 
     p_cruise = calculate_cruise_power(v_br, params)
-    assert p_cruise < p_hover, f"Cruise power {p_cruise:.1f}W must be lower than hover power {p_hover:.1f}W"
+    assert p_cruise < p_hover, (
+        f"Cruise power {p_cruise:.1f}W must be lower than hover power {p_hover:.1f}W"
+    )
     savings_ratio = (p_hover - p_cruise) / p_hover
-    assert 0.20 <= savings_ratio <= 0.45, f"Cruise savings {savings_ratio*100:.1f}% outside expected 20-45% range"
+    assert 0.20 <= savings_ratio <= 0.45, (
+        f"Cruise savings {savings_ratio * 100:.1f}% outside expected 20-45% range"
+    )
 
 
 def test_cruise_power_is_robust_at_small_speed():
@@ -213,11 +217,13 @@ def test_overwhelming_headwind_is_unreachable():
 
 def test_cost_matrices_asymmetry():
     """Verify that compute_cost_matrices produces asymmetric matrices when wind is present."""
-    coords = np.array([
-        [0.0, 0.0],
-        [400.0, 0.0],
-        [0.0, 400.0],
-    ])
+    coords = np.array(
+        [
+            [0.0, 0.0],
+            [400.0, 0.0],
+            [0.0, 400.0],
+        ]
+    )
     t_mat, e_mat = compute_cost_matrices(
         coords,
         wind_speed_mps=5.0,
