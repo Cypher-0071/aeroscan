@@ -1795,9 +1795,10 @@ if "01 Operations Map" in workspace_choice:
             st.plotly_chart(fig_3d, use_container_width=True, key="mission_3d_chart")
 
     from streamlit.components.v1 import html as _html
+
     from app.mission_sim import render_mission_sim_html
 
-    _html(render_mission_sim_html(len(instance.drones)), height=980, scrolling=False)
+    _html(render_mission_sim_html(instance, schedule), height=980, scrolling=False)
 
     # Mission Intelligence Strip (Under Map)
     visited_cnt = sum(len(r.target_ids) for r in schedule.assigned_routes)
