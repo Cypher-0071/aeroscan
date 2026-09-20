@@ -1309,7 +1309,7 @@ with st.sidebar:
             sched = solve_fleet_schedule(inst, route_pool, run_baselines=True)
             st.session_state.schedule = sched
             st.session_state.grasp_schedule = solve_grasp_baseline(inst)
-            st.toast(f"Swarm solved: {sched.cumulative_reward:.0f} pts in {sched.solve_time_seconds:.2f}s", icon="✓")
+            st.toast(f"Swarm solved: {sched.cumulative_reward:.0f} pts in {sched.solve_time_seconds:.2f}s", icon="✅")
 
     if load_mock:
         mock_path = Path("tests/mock_schedule.json")
@@ -1317,7 +1317,7 @@ with st.sidebar:
             with open(mock_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             st.session_state.schedule = FleetSchedule.from_dict(data)
-            st.toast("Loaded mock mission fixture", icon="✓")
+            st.toast("Loaded mock mission fixture", icon="✅")
 
     st.markdown(
         f"""
