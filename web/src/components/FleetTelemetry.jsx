@@ -61,10 +61,10 @@ export default function FleetTelemetry({
   return (
     <div className="space-y-4">
       {/* Overview Banner */}
-      <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
+      <div className="glass-card rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="font-mono text-sm font-bold text-slate-100 flex items-center gap-2">
-            <Activity className="w-4 h-4 text-sky-400" />
+          <div className="font-mono text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <Activity className="w-4 h-4 text-sky-600" />
             <span>SWARM TELEMETRY &amp; KINEMATICS COMMAND CENTER</span>
           </div>
           <div className="font-mono text-xs text-slate-400 mt-0.5">
@@ -72,22 +72,22 @@ export default function FleetTelemetry({
           </div>
         </div>
 
-        <div className="flex items-center gap-4 font-mono text-xs">
-          <div className="px-2.5 py-1 rounded bg-slate-950 border border-slate-800">
-            <span className="text-slate-400 mr-1.5">ACTIVE:</span>
-            <span className="text-sky-400 font-bold">{activeCount.toString().padStart(2, '0')}</span>
+        <div className="flex items-center gap-3 font-mono text-xs">
+          <div className="px-3 py-1 rounded-full glass-pill border border-slate-200/80 bg-white/70">
+            <span className="text-slate-400 mr-1.5 font-normal">ACTIVE:</span>
+            <span className="text-sky-700 font-semibold">{activeCount.toString().padStart(2, '0')}</span>
           </div>
-          <div className="px-2.5 py-1 rounded bg-slate-950 border border-slate-800">
-            <span className="text-slate-400 mr-1.5">STANDBY:</span>
-            <span className="text-slate-300 font-bold">{standbyCount.toString().padStart(2, '0')}</span>
+          <div className="px-3 py-1 rounded-full glass-pill border border-slate-200/80 bg-white/70">
+            <span className="text-slate-400 mr-1.5 font-normal">STANDBY:</span>
+            <span className="text-slate-700 font-semibold">{standbyCount.toString().padStart(2, '0')}</span>
           </div>
-          <div className="px-2.5 py-1 rounded bg-slate-950 border border-slate-800">
-            <span className="text-slate-400 mr-1.5">AVG BATTERY:</span>
-            <span className="text-emerald-400 font-bold">{avgBat.toFixed(1)}%</span>
+          <div className="px-3 py-1 rounded-full glass-pill border border-slate-200/80 bg-white/70">
+            <span className="text-slate-400 mr-1.5 font-normal">AVG BATTERY:</span>
+            <span className="text-emerald-600 font-semibold">{avgBat.toFixed(1)}%</span>
           </div>
-          <div className="px-2.5 py-1 rounded bg-slate-950 border border-slate-800">
-            <span className="text-slate-400 mr-1.5">TOTAL DIST:</span>
-            <span className="text-cyan-400 font-bold">{totalDistKm.toFixed(1)} KM</span>
+          <div className="px-3 py-1 rounded-full glass-pill border border-slate-200/80 bg-white/70">
+            <span className="text-slate-400 mr-1.5 font-normal">TOTAL DIST:</span>
+            <span className="text-sky-700 font-semibold">{totalDistKm.toFixed(1)} KM</span>
           </div>
         </div>
       </div>
@@ -96,7 +96,7 @@ export default function FleetTelemetry({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: Fleet List (3 cols) */}
         <div className="lg:col-span-3 space-y-2">
-          <div className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider px-1 flex items-center justify-between">
+          <div className="text-xs font-mono font-medium text-slate-400 uppercase tracking-wider px-1 flex items-center justify-between">
             <span>Fleet Roster</span>
             <span className="text-[10px] text-slate-400">{drones.length} UAVs</span>
           </div>
@@ -113,34 +113,34 @@ export default function FleetTelemetry({
                 <button
                   key={drone.id}
                   onClick={() => setSelectedDroneId(drone.id)}
-                  className={`w-full text-left p-3 rounded-xl border transition-all cursor-pointer ${
+                  className={`w-full text-left p-3.5 rounded-2xl border transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-sky-950/60 border-sky-500/50 shadow-md shadow-sky-950'
-                      : 'bg-slate-900/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900'
+                      ? 'glass-card border-sky-300 shadow-sm bg-white/90'
+                      : 'glass-pill border-slate-200/70 bg-white/50 hover:bg-white/80'
                   }`}
                 >
                   <div className="flex items-center justify-between font-mono text-xs">
-                    <span className="font-bold text-slate-100">{drone.id}</span>
-                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                    <span className="font-bold text-slate-900">{drone.id}</span>
+                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-medium ${
                       isCruising
-                        ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30'
-                        : 'bg-slate-800 text-slate-400'
+                        ? 'bg-sky-50 text-sky-700 border border-sky-200/80'
+                        : 'bg-slate-100 text-slate-500 border border-slate-200/70'
                     }`}>
                       {phase}
                     </span>
                   </div>
 
-                  <div className="mt-2 space-y-1 font-mono text-[11px]">
-                    <div className="flex justify-between text-slate-400">
+                  <div className="mt-2.5 space-y-1.5 font-mono text-[11px]">
+                    <div className="flex justify-between text-slate-500">
                       <span>Battery SoC</span>
-                      <span className={`font-bold ${soc >= 15 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      <span className={`font-semibold ${soc >= 15 ? 'text-emerald-600' : 'text-rose-600'}`}>
                         {soc.toFixed(0)}%
                       </span>
                     </div>
-                    <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                    <div className="w-full bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          soc >= 15 ? 'bg-emerald-400' : 'bg-rose-500'
+                          soc >= 15 ? 'bg-emerald-500' : 'bg-rose-500'
                         }`}
                         style={{ width: `${Math.max(0, Math.min(100, soc))}%` }}
                       />
@@ -160,30 +160,30 @@ export default function FleetTelemetry({
 
         {/* Center Column: Kinematics Profile Charts (6 cols) */}
         <div className="lg:col-span-6 space-y-4">
-          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md space-y-3">
-            <div className="flex items-center justify-between font-mono text-xs border-b border-slate-800 pb-2">
-              <span className="font-bold text-slate-200 flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-sky-400" />
+          <div className="glass-card rounded-2xl p-4 space-y-3.5">
+            <div className="flex items-center justify-between font-mono text-xs border-b border-slate-200/80 pb-2.5">
+              <span className="font-semibold text-slate-900 flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-sky-600" />
                 KINEMATICS PROFILE // {selectedDroneId}
               </span>
-              <span className="text-[10px] text-slate-400">
+              <span className="text-[10px] text-slate-400 font-mono">
                 TIME: T+{missionTime.toFixed(0)}s
               </span>
             </div>
 
             {/* Battery SoC Curve (SVG Visualizer) */}
-            <div className="space-y-1">
-              <div className="flex justify-between font-mono text-[11px] text-slate-400">
+            <div className="space-y-1.5">
+              <div className="flex justify-between font-mono text-[11px] text-slate-500">
                 <span>Battery State of Charge (%)</span>
-                <span className="text-emerald-400 font-bold">
+                <span className="text-emerald-600 font-semibold">
                   {(activeDroneTelem.battery_percent ?? 100).toFixed(1)}%
                 </span>
               </div>
-              <div className="h-32 w-full bg-slate-950 rounded-lg p-2 border border-slate-800 relative">
+              <div className="h-32 w-full bg-white/80 rounded-xl p-2.5 border border-slate-200/80 shadow-inner relative">
                 <svg className="w-full h-full" viewBox="0 0 400 100" preserveAspectRatio="none">
                   {/* 15% Safety Floor Line */}
-                  <line x1="0" y1="85" x2="400" y2="85" stroke="#ef4444" strokeWidth="1" strokeDasharray="4 4" />
-                  <text x="5" y="82" fill="#ef4444" fontSize="8" fontFamily="monospace">15% SAFETY FLOOR</text>
+                  <line x1="0" y1="85" x2="400" y2="85" stroke="#ef4444" strokeWidth="1" strokeDasharray="4 4" strokeOpacity="0.7" />
+                  <text x="5" y="81" fill="#ef4444" fontSize="8" fontFamily="monospace">15% SAFETY FLOOR</text>
 
                   {/* Battery Curve */}
                   {waypoints.length > 1 && (() => {
@@ -196,15 +196,15 @@ export default function FleetTelemetry({
 
                     return (
                       <>
-                        <polyline fill="none" stroke="#10b981" strokeWidth="2.5" points={points} />
+                        <polyline fill="none" stroke="#059669" strokeWidth="2.5" points={points} />
                         {/* Current Time Marker */}
                         {(() => {
                           const cx = Math.min(400, Math.max(0, (missionTime / maxT) * 400));
                           const cy = 100 - ((activeDroneTelem.battery_percent ?? 100) / 100) * 90;
                           return (
                             <>
-                              <line x1={cx} y1="0" x2={cx} y2="100" stroke="#38bdf8" strokeWidth="1.5" strokeDasharray="3 3" />
-                              <circle cx={cx} cy={cy} r="4" fill="#38bdf8" stroke="#ffffff" strokeWidth="1.5" />
+                              <line x1={cx} y1="0" x2={cx} y2="100" stroke="#0284c7" strokeWidth="1.5" strokeDasharray="3 3" />
+                              <circle cx={cx} cy={cy} r="4" fill="#0284c7" stroke="#ffffff" strokeWidth="2" />
                             </>
                           );
                         })()}
@@ -216,15 +216,15 @@ export default function FleetTelemetry({
             </div>
 
             {/* Altitude Profile Curve */}
-            <div className="space-y-1 pt-1">
-              <div className="flex justify-between font-mono text-[11px] text-slate-400">
+            <div className="space-y-1.5 pt-1">
+              <div className="flex justify-between font-mono text-[11px] text-slate-500">
                 <span>Flight Altitude (m AGL)</span>
-                <span className="text-sky-400 font-bold">{(activeDroneTelem.z ?? 60).toFixed(0)} m</span>
+                <span className="text-sky-700 font-semibold">{(activeDroneTelem.z ?? 60).toFixed(0)} m</span>
               </div>
-              <div className="h-28 w-full bg-slate-950 rounded-lg p-2 border border-slate-800 relative">
+              <div className="h-28 w-full bg-white/80 rounded-xl p-2.5 border border-slate-200/80 shadow-inner relative">
                 <svg className="w-full h-full" viewBox="0 0 400 100" preserveAspectRatio="none">
                   {/* Ground Level */}
-                  <line x1="0" y1="95" x2="400" y2="95" stroke="#475569" strokeWidth="1" />
+                  <line x1="0" y1="95" x2="400" y2="95" stroke="rgba(15,23,42,0.12)" strokeWidth="1" />
                   
                   {/* Altitude Bar Profile */}
                   {waypoints.length > 0 && (() => {
@@ -241,11 +241,11 @@ export default function FleetTelemetry({
 
                     return (
                       <>
-                        <polygon fill="rgba(56, 189, 248, 0.15)" stroke="#38bdf8" strokeWidth="2" points={points} />
+                        <polygon fill="rgba(2, 132, 199, 0.08)" stroke="#0284c7" strokeWidth="2" points={points} />
                         {(() => {
                           const cx = Math.min(400, Math.max(0, (missionTime / maxT) * 400));
                           return (
-                            <line x1={cx} y1="0" x2={cx} y2="100" stroke="#facc15" strokeWidth="1.5" strokeDasharray="3 3" />
+                            <line x1={cx} y1="0" x2={cx} y2="100" stroke="#d97706" strokeWidth="1.5" strokeDasharray="3 3" />
                           );
                         })()}
                       </>
@@ -259,64 +259,64 @@ export default function FleetTelemetry({
 
         {/* Right Column: Avionics HUD Card (3 cols) */}
         <div className="lg:col-span-3 space-y-3">
-          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md space-y-3">
-            <div className="font-mono text-xs font-bold text-slate-200 border-b border-slate-800 pb-2 flex items-center justify-between">
+          <div className="glass-card rounded-2xl p-4 space-y-3">
+            <div className="font-mono text-xs font-semibold text-slate-900 border-b border-slate-200/80 pb-2 flex items-center justify-between">
               <span>AVIONICS HUD</span>
-              <span className="text-sky-400 font-bold">{selectedDroneId}</span>
+              <span className="text-sky-700 font-bold">{selectedDroneId}</span>
             </div>
 
             {/* Avionics Instrument Readout Rows */}
-            <div className="space-y-2 font-mono text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-800/50">
+            <div className="space-y-1.5 font-mono text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
                 <span className="text-slate-400">CALLSIGN</span>
-                <span className="text-slate-100 font-bold">{selectedDroneId}</span>
+                <span className="text-slate-800 font-semibold">{selectedDroneId}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-800/50">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
                 <span className="text-slate-400">FLIGHT PHASE</span>
-                <span className="text-sky-400 font-bold">{activeDroneTelem.flight_phase}</span>
+                <span className="text-sky-700 font-semibold">{activeDroneTelem.flight_phase}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-800/50">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
                 <span className="text-slate-400">GROUNDSPEED</span>
-                <span className="text-slate-100 font-bold">{(activeDroneTelem.speed_mps ?? 14.5).toFixed(1)} m/s</span>
+                <span className="text-slate-800 font-semibold">{(activeDroneTelem.speed_mps ?? 14.5).toFixed(1)} m/s</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-800/50">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
                 <span className="text-slate-400">ALTITUDE (AGL)</span>
-                <span className="text-slate-100 font-bold">{(activeDroneTelem.z ?? 60).toFixed(0)} m</span>
+                <span className="text-slate-800 font-semibold">{(activeDroneTelem.z ?? 60).toFixed(0)} m</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-800/50">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
                 <span className="text-slate-400">HEADING AZIMUTH</span>
-                <span className="text-sky-400 font-bold">{(activeDroneTelem.heading_deg ?? 0).toFixed(0)}°</span>
+                <span className="text-sky-700 font-semibold">{(activeDroneTelem.heading_deg ?? 0).toFixed(0)}°</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-800/50">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
                 <span className="text-slate-400">CURRENT TARGET</span>
-                <span className="text-amber-400 font-bold">{activeDroneTelem.target_name ?? 'DEPOT'}</span>
+                <span className="text-amber-700 font-semibold">{activeDroneTelem.target_name ?? 'DEPOT'}</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-800/50">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
                 <span className="text-slate-400">COMM LINK RSSI</span>
-                <span className="text-emerald-400 font-bold">99.8%</span>
+                <span className="text-emerald-600 font-semibold">99.8%</span>
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-800/50">
+              <div className="flex justify-between py-1 border-b border-slate-200/60">
                 <span className="text-slate-400">GEOFENCE STATUS</span>
-                <span className="text-emerald-400 font-bold">CLEAR</span>
+                <span className="text-emerald-600 font-semibold">CLEAR</span>
               </div>
             </div>
 
             {/* Tactical Compass Visualizer */}
             <div className="pt-2 flex flex-col items-center justify-center">
-              <div className="relative w-20 h-20 rounded-full border-2 border-slate-800 flex items-center justify-center bg-slate-950">
-                <span className="absolute top-1 text-[8px] font-mono font-bold text-slate-500">N</span>
-                <span className="absolute right-1 text-[8px] font-mono font-bold text-slate-500">E</span>
-                <span className="absolute bottom-1 text-[8px] font-mono font-bold text-slate-500">S</span>
-                <span className="absolute left-1 text-[8px] font-mono font-bold text-slate-500">W</span>
+              <div className="relative w-20 h-20 rounded-full border border-slate-200/90 flex items-center justify-center bg-white/90 shadow-inner">
+                <span className="absolute top-1 text-[8px] font-mono font-bold text-slate-400">N</span>
+                <span className="absolute right-1 text-[8px] font-mono font-bold text-slate-400">E</span>
+                <span className="absolute bottom-1 text-[8px] font-mono font-bold text-slate-400">S</span>
+                <span className="absolute left-1 text-[8px] font-mono font-bold text-slate-400">W</span>
                 
                 {/* Needle */}
                 <div
-                  className="w-1 h-14 bg-gradient-to-b from-sky-400 via-transparent to-slate-600 transition-transform duration-200 rounded"
+                  className="w-1 h-14 bg-gradient-to-b from-sky-600 via-transparent to-slate-400 transition-transform duration-200 rounded"
                   style={{ transform: `rotate(${activeDroneTelem.heading_deg ?? 0}deg)` }}
                 />
-                <div className="w-2 h-2 rounded-full bg-sky-400 z-10" />
+                <div className="w-2 h-2 rounded-full bg-sky-600 z-10" />
               </div>
-              <div className="text-[10px] font-mono text-slate-400 mt-2">
+              <div className="text-[10px] font-mono text-slate-500 mt-2">
                 AZIMUTH: {(activeDroneTelem.heading_deg ?? 0).toFixed(0)}° DEG
               </div>
             </div>
@@ -325,52 +325,52 @@ export default function FleetTelemetry({
       </div>
 
       {/* Detailed Fleet Kinematics Table */}
-      <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md space-y-3">
+      <div className="glass-card rounded-2xl p-4 space-y-3.5">
         <div className="flex items-center justify-between font-mono text-xs">
-          <span className="font-bold text-slate-200">DETAILED FLEET KINEMATICS TABLE (10Hz STATE VECTORS)</span>
+          <span className="font-semibold text-slate-900">DETAILED FLEET KINEMATICS TABLE (10Hz STATE VECTORS)</span>
           <span className="text-slate-400">{telemetryList.length} Sorties Monitored</span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left font-mono text-xs border-collapse">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 text-[11px]">
-                <th className="py-2 px-3">UAV CALLSIGN</th>
-                <th className="py-2 px-3">EASTING X (m)</th>
-                <th className="py-2 px-3">NORTHING Y (m)</th>
-                <th className="py-2 px-3">ALTITUDE Z (m)</th>
-                <th className="py-2 px-3">BATTERY SOC</th>
-                <th className="py-2 px-3">GROUNDSPEED</th>
-                <th className="py-2 px-3">HEADING</th>
-                <th className="py-2 px-3">STATE VECTOR</th>
+              <tr className="border-b border-slate-200/80 text-slate-400 text-[11px]">
+                <th className="py-2.5 px-3">UAV CALLSIGN</th>
+                <th className="py-2.5 px-3">EASTING X (m)</th>
+                <th className="py-2.5 px-3">NORTHING Y (m)</th>
+                <th className="py-2.5 px-3">ALTITUDE Z (m)</th>
+                <th className="py-2.5 px-3">BATTERY SOC</th>
+                <th className="py-2.5 px-3">GROUNDSPEED</th>
+                <th className="py-2.5 px-3">HEADING</th>
+                <th className="py-2.5 px-3">STATE VECTOR</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-200/60">
               {telemetryList.map((t) => {
                 const soc = t.battery_percent ?? 100;
                 return (
-                  <tr key={t.drone_id} className="hover:bg-slate-800/40">
-                    <td className="py-2.5 px-3 font-bold text-sky-300">{t.drone_id}</td>
-                    <td className="py-2.5 px-3 text-slate-300">{(t.x ?? 0).toFixed(1)}</td>
-                    <td className="py-2.5 px-3 text-slate-300">{(t.y ?? 0).toFixed(1)}</td>
-                    <td className="py-2.5 px-3 text-slate-300">{(t.z ?? 60).toFixed(1)}</td>
+                  <tr key={t.drone_id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-2.5 px-3 font-semibold text-sky-700">{t.drone_id}</td>
+                    <td className="py-2.5 px-3 text-slate-700">{(t.x ?? 0).toFixed(1)}</td>
+                    <td className="py-2.5 px-3 text-slate-700">{(t.y ?? 0).toFixed(1)}</td>
+                    <td className="py-2.5 px-3 text-slate-700">{(t.z ?? 60).toFixed(1)}</td>
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-16 bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div className="w-16 bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
                           <div
-                            className={`h-full rounded-full ${soc >= 15 ? 'bg-emerald-400' : 'bg-rose-500'}`}
+                            className={`h-full rounded-full ${soc >= 15 ? 'bg-emerald-500' : 'bg-rose-500'}`}
                             style={{ width: `${Math.max(0, Math.min(100, soc))}%` }}
                           />
                         </div>
-                        <span className={`font-semibold ${soc >= 15 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        <span className={`font-semibold ${soc >= 15 ? 'text-emerald-600' : 'text-rose-600'}`}>
                           {soc.toFixed(0)}%
                         </span>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 text-slate-300">{(t.speed_mps ?? 14.5).toFixed(1)} m/s</td>
-                    <td className="py-2.5 px-3 text-slate-300">{(t.heading_deg ?? 0).toFixed(0)}°</td>
+                    <td className="py-2.5 px-3 text-slate-700">{(t.speed_mps ?? 14.5).toFixed(1)} m/s</td>
+                    <td className="py-2.5 px-3 text-slate-700">{(t.heading_deg ?? 0).toFixed(0)}°</td>
                     <td className="py-2.5 px-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] bg-sky-950 text-sky-400 border border-sky-800/50">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] bg-sky-50 text-sky-700 border border-sky-200/80">
                         {t.flight_phase ?? 'CRUISE'}
                       </span>
                     </td>

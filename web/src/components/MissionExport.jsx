@@ -132,10 +132,10 @@ export default function MissionExport({
   return (
     <div className="space-y-4 font-mono">
       {/* Export Banner */}
-      <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md flex flex-wrap items-center justify-between gap-4">
+      <div className="glass-card rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="text-sm font-bold text-slate-100 flex items-center gap-2">
-            <DownloadCloud className="w-4 h-4 text-sky-400" />
+          <div className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <DownloadCloud className="w-4 h-4 text-sky-600" />
             <span>AUTONOMOUS HARDWARE EXPORT ENGINE</span>
           </div>
           <div className="text-xs text-slate-400 mt-0.5">
@@ -144,7 +144,7 @@ export default function MissionExport({
         </div>
 
         <div className="flex items-center gap-2 text-xs">
-          <span className="px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-sky-400 font-bold">
+          <span className="px-3 py-1 rounded-full glass-pill border border-sky-200/80 bg-sky-50 text-sky-700 font-semibold shadow-sm">
             COMPLIANT: MAVLink v2.0 / QGC v1
           </span>
         </div>
@@ -154,8 +154,8 @@ export default function MissionExport({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md space-y-3">
-            <div className="text-xs font-bold text-slate-200">
+          <div className="glass-card rounded-2xl p-4 space-y-3.5">
+            <div className="text-xs font-semibold text-slate-900">
               SELECT TARGET UAV
             </div>
 
@@ -163,10 +163,10 @@ export default function MissionExport({
               <select
                 value={selectedDroneId}
                 onChange={(e) => setSelectedDroneId(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-200 focus:outline-none focus:border-sky-500"
+                className="glass-input w-full rounded-xl px-3 py-2 text-xs font-mono text-slate-800 bg-white/80 cursor-pointer"
               >
                 {routes.map((r) => (
-                  <option key={r.drone_id} value={r.drone_id}>
+                  <option key={r.drone_id} value={r.drone_id} className="bg-white text-slate-800">
                     {r.drone_id} ({(r.target_ids?.length ?? 0)} nodes · {(r.final_reserve_percent ?? 100).toFixed(0)}% reserve)
                   </option>
                 ))}
@@ -174,30 +174,30 @@ export default function MissionExport({
             </div>
 
             {/* Mission Corridor Summary Card */}
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800/80 space-y-2 text-xs">
-              <div className="font-bold text-sky-400 border-b border-slate-800 pb-1 flex justify-between">
+            <div className="glass-pill rounded-xl p-3.5 space-y-2 text-xs border border-slate-200/80 bg-white/70 shadow-sm">
+              <div className="font-semibold text-sky-800 border-b border-slate-200/70 pb-1.5 flex justify-between">
                 <span>MISSION SUMMARY // {selectedDroneId}</span>
-                <span className="text-emerald-400 font-bold">VALIDATED</span>
+                <span className="text-emerald-700 font-semibold">VALIDATED</span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>CRUISE SPEED:</span>
-                <span className="text-slate-100 font-bold">{(selectedDrone?.cruise_speed ?? 14.5).toFixed(1)} m/s</span>
+                <span className="text-slate-800 font-semibold">{(selectedDrone?.cruise_speed ?? 14.5).toFixed(1)} m/s</span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>WAYPOINT NODES:</span>
-                <span className="text-slate-100 font-bold">{selectedRoute?.waypoints?.length ?? 0} points</span>
+                <span className="text-slate-800 font-semibold">{selectedRoute?.waypoints?.length ?? 0} points</span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>FLIGHT DURATION:</span>
-                <span className="text-slate-100 font-bold">{(selectedRoute?.total_flight_time ?? 0).toFixed(0)}s</span>
+                <span className="text-slate-800 font-semibold">{(selectedRoute?.total_flight_time ?? 0).toFixed(0)}s</span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>FINAL BATTERY RESERVE:</span>
-                <span className="text-emerald-400 font-bold">{(selectedRoute?.final_reserve_percent ?? 100).toFixed(1)}%</span>
+                <span className="text-emerald-600 font-semibold">{(selectedRoute?.final_reserve_percent ?? 100).toFixed(1)}%</span>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>TARGET REWARDS:</span>
-                <span className="text-amber-400 font-bold">{(selectedRoute?.total_reward ?? 0).toFixed(0)} PTS</span>
+                <span className="text-amber-700 font-semibold">{(selectedRoute?.total_reward ?? 0).toFixed(0)} PTS</span>
               </div>
             </div>
 
@@ -205,7 +205,7 @@ export default function MissionExport({
             <div className="space-y-2 pt-1">
               <button
                 onClick={() => handleDownload('qgc')}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white text-xs font-bold shadow-md shadow-sky-600/30 transition-all cursor-pointer"
+                className="glass-btn-primary w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold cursor-pointer"
               >
                 <FileCode className="w-4 h-4" />
                 <span>DOWNLOAD QGC PLAN ({selectedDroneId})</span>
@@ -213,7 +213,7 @@ export default function MissionExport({
 
               <button
                 onClick={() => handleDownload('mavlink')}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-all cursor-pointer"
+                className="glass-btn-secondary w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold cursor-pointer"
               >
                 <FileText className="w-4 h-4" />
                 <span>DOWNLOAD MAVLINK WAYPOINTS ({selectedDroneId})</span>
@@ -221,7 +221,7 @@ export default function MissionExport({
 
               <button
                 onClick={() => handleDownload('csv')}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold transition-all cursor-pointer"
+                className="glass-btn-secondary w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-semibold cursor-pointer"
               >
                 <Table className="w-4 h-4" />
                 <span>DOWNLOAD SWARM TELEMETRY CSV</span>
@@ -229,21 +229,21 @@ export default function MissionExport({
             </div>
 
             {/* Pre-Flight Validation Checklist */}
-            <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2 text-[11px]">
-              <div className="font-bold text-sky-400">PRE-FLIGHT VALIDATION ENGINE</div>
-              <div className="flex items-center gap-2 text-emerald-400">
+            <div className="glass-pill rounded-xl p-3.5 space-y-2 text-[11px] border border-slate-200/80 bg-white/60 shadow-sm">
+              <div className="font-semibold text-sky-800">PRE-FLIGHT VALIDATION ENGINE</div>
+              <div className="flex items-center gap-2 text-emerald-700">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Waypoint terrain constraints verified</span>
               </div>
-              <div className="flex items-center gap-2 text-emerald-400">
+              <div className="flex items-center gap-2 text-emerald-700">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Battery SoC &gt; 15% safety floor enforced</span>
               </div>
-              <div className="flex items-center gap-2 text-emerald-400">
+              <div className="flex items-center gap-2 text-emerald-700">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Geofence boundary deconflicted</span>
               </div>
-              <div className="flex items-center gap-2 text-emerald-400">
+              <div className="flex items-center gap-2 text-emerald-700">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>CRC32 telemetry checksum passed</span>
               </div>
@@ -253,44 +253,44 @@ export default function MissionExport({
 
         {/* Right Column: Live Syntax Preview (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md space-y-3">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="glass-card rounded-2xl p-4 space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
               <div className="flex items-center gap-2">
-                <Terminal className="w-4 h-4 text-sky-400" />
-                <span className="text-xs font-bold text-slate-200">
+                <Terminal className="w-4 h-4 text-sky-600" />
+                <span className="text-xs font-semibold text-slate-900">
                   LIVE ARTIFACT PREVIEW
                 </span>
               </div>
 
               <div className="flex items-center gap-2">
                 {/* Format Toggle */}
-                <div className="flex bg-slate-950 rounded-lg p-0.5 border border-slate-800 text-xs">
+                <div className="flex glass-pill rounded-xl p-0.5 text-xs border border-slate-200/80 bg-white/70">
                   <button
                     onClick={() => setPreviewTab('qgc')}
-                    className={`px-2.5 py-1 rounded ${
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                       previewTab === 'qgc'
-                        ? 'bg-sky-600 text-white font-bold'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-white text-slate-900 font-bold shadow-sm'
+                        : 'text-slate-400 hover:text-slate-800'
                     }`}
                   >
                     QGC .plan
                   </button>
                   <button
                     onClick={() => setPreviewTab('mavlink')}
-                    className={`px-2.5 py-1 rounded ${
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                       previewTab === 'mavlink'
-                        ? 'bg-sky-600 text-white font-bold'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-white text-slate-900 font-bold shadow-sm'
+                        : 'text-slate-400 hover:text-slate-800'
                     }`}
                   >
                     MAVLink
                   </button>
                   <button
                     onClick={() => setPreviewTab('csv')}
-                    className={`px-2.5 py-1 rounded ${
+                    className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
                       previewTab === 'csv'
-                        ? 'bg-sky-600 text-white font-bold'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-white text-slate-900 font-bold shadow-sm'
+                        : 'text-slate-400 hover:text-slate-800'
                     }`}
                   >
                     CSV Audit
@@ -299,9 +299,9 @@ export default function MissionExport({
 
                 <button
                   onClick={handleCopy}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700"
+                  className="glass-btn-secondary flex items-center gap-1.5 px-3 py-1 rounded-xl text-slate-700 text-xs cursor-pointer"
                 >
-                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copied ? 'Copied' : 'Copy'}</span>
                 </button>
               </div>
@@ -309,9 +309,9 @@ export default function MissionExport({
 
             {/* Code Box */}
             <div className="relative">
-              <pre className="h-[480px] overflow-auto p-4 rounded-xl bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 leading-relaxed">
+              <pre className="h-[480px] overflow-auto p-4 rounded-xl bg-white/90 border border-slate-200/80 text-[11px] font-mono text-slate-800 leading-relaxed shadow-inner">
                 {loadingExport ? (
-                  <div className="flex items-center justify-center h-full text-slate-500">
+                  <div className="flex items-center justify-center h-full text-slate-400">
                     Generating flight plan serialization...
                   </div>
                 ) : (

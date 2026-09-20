@@ -149,8 +149,15 @@ export default function App() {
   }, [missionTime, schedule, instance]);
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans select-none">
-      {/* Sidebar Navigation */}
+    <div className="relative flex h-screen bg-[#f6f8fc] text-slate-900 overflow-hidden font-sans select-none">
+      {/* Ambient Radial Mesh Gradient Orbs (True Glass Refraction Engine) */}
+      <div className="ambient-glow-bg" aria-hidden="true">
+        <div className="ambient-orb-1" />
+        <div className="ambient-orb-2" />
+        <div className="ambient-orb-3" />
+      </div>
+
+      {/* Glass Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -170,7 +177,7 @@ export default function App() {
       />
 
       {/* Main Mission Operations Viewport */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="relative z-10 flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Command Bar */}
         <Header
           instance={instance}
@@ -179,7 +186,7 @@ export default function App() {
         />
 
         {/* Content Area */}
-        <main className="flex-1 overflow-y-auto p-5 bg-slate-950 bg-tactical-grid space-y-4">
+        <main className="flex-1 overflow-y-auto p-5 space-y-4">
           {activeTab === 'map' && (
             <OperationsMap
               instance={instance}
@@ -229,11 +236,11 @@ export default function App() {
         </main>
       </div>
 
-      {/* Floating Tactical Toast Notification */}
+      {/* Floating Minimal Glass Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-slate-900 border border-sky-500/40 text-sky-200 text-xs font-mono shadow-2xl flex items-center gap-2 backdrop-blur-md animate-bounce">
-          <span className="w-2 h-2 rounded-full bg-sky-400"></span>
-          <span>{toastMessage}</span>
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-2xl glass-card text-xs font-mono shadow-xl flex items-center gap-2.5 border border-black/[0.06] animate-fade-in">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+          <span className="text-slate-800 font-medium">{toastMessage}</span>
         </div>
       )}
     </div>
