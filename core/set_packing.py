@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 from ortools.sat.python import cp_model
 
 from core.contracts import CandidateRoute, FleetSchedule, InstanceContext, RoutePool
+
+logger = logging.getLogger(__name__)
 
 
 def solve_set_packing(
@@ -67,6 +70,13 @@ def solve_set_packing(
     cp_status = solver.Solve(model)
     solve_latency = time.perf_counter() - t0
 
+    if solve_latency > 0.25:
+        logger.warning(
+            "CP-SAT solver latency %.3fs exceeded 0.25s target budget (limit=%.2fs)",
+            solve_latency,
+            time_limit_seconds,
+        )
+
     status_map = {
         cp_model.OPTIMAL: "OPTIMAL",
         cp_model.FEASIBLE: "FEASIBLE",
@@ -120,13 +130,18 @@ def solve_fleet_schedule(
     ga_reward = 0.0
     if run_baselines:
         try:
-            grasp_sched = solve_grasp_baseline(instance)
+            grasp_sched = solve_grasp_baseline(instance, alpha=0.3, seed=42)
             grasp_reward = grasp_sched.cumulative_reward
         except Exception:
             grasp_reward = 0.0
 
         try:
-            ga_sched = solve_genetic_algorithm(instance, generations=25)
+            ga_sched = solve_genetic_algorithm(
+                instance,
+                population_size=20,
+                generations=15,
+                seed=42,
+            )
             ga_reward = ga_sched.cumulative_reward
         except Exception:
             ga_reward = 0.0
@@ -134,6 +149,8 @@ def solve_fleet_schedule(
     gain_pct = 0.0
     if grasp_reward > 0:
         gain_pct = ((total_reward - grasp_reward) / grasp_reward) * 100.0
+    elif total_reward > 0 and grasp_reward == 0.0:
+        gain_pct = 100.0
 
     temp_sched = FleetSchedule(
         status=status_str,
@@ -148,7 +165,7 @@ def solve_fleet_schedule(
     )
 
     audit = audit_fleet_schedule(temp_sched, instance)
-    temp_sched.validation_passed = audit["valid"]
+    temp_sched.validation_passed = audit["valid"] and (status_str in ("OPTIMAL", "FEASIBLE"))
 
     return temp_sched
 

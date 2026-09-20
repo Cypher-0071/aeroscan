@@ -72,8 +72,13 @@ def test_validator_detects_battery_violation(mock_inst):
     audit = audit_fleet_schedule(bad_schedule, mock_inst)
     assert audit["valid"] is False
     assert any("Battery reserve violation" in v for v in audit["violations"])
+    assert any("Fatal: Battery safety margin breached" in v for v in audit["violations"])
 
     with pytest.raises(ScheduleValidationError):
+        validate_fleet_schedule(bad_schedule, mock_inst)
+
+    # Verify PRD 2.2 requirement: raises AssertionError
+    with pytest.raises(AssertionError):
         validate_fleet_schedule(bad_schedule, mock_inst)
 
 

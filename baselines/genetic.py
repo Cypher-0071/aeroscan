@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 import time
 
-from core.contracts import CandidateRoute, FleetSchedule, InstanceContext
+from core.contracts import CandidateRoute, FleetSchedule, InstanceContext, WaypointVisit
 from core.operators import evaluate_route_trajectory
 
 
@@ -56,14 +56,40 @@ def evaluate_chromosome(
             empty_eval = evaluate_route_trajectory([], drone, instance)
             if empty_eval is not None:
                 assigned_routes.append(empty_eval)
+            else:
+                assigned_routes.append(
+                    CandidateRoute(
+                        drone_id=drone.id,
+                        target_ids=[],
+                        waypoints=[
+                            WaypointVisit(
+                                node_id=drone.launch_depot_id,
+                                arrival_time=0.0,
+                                departure_time=0.0,
+                                energy_consumed=0.0,
+                                remaining_battery_percent=100.0,
+                            ),
+                            WaypointVisit(
+                                node_id=drone.recovery_depot_id,
+                                arrival_time=0.0,
+                                departure_time=0.0,
+                                energy_consumed=0.0,
+                                remaining_battery_percent=100.0,
+                            ),
+                        ],
+                        total_reward=0.0,
+                        total_flight_time=0.0,
+                        total_energy_joules=0.0,
+                    )
+                )
 
     return total_reward, assigned_routes
 
 
 def solve_genetic_algorithm(
     instance: InstanceContext,
-    population_size: int = 40,
-    generations: int = 50,
+    population_size: int = 20,
+    generations: int = 20,
     crossover_rate: float = 0.8,
     mutation_rate: float = 0.2,
     seed: int | None = 42,
