@@ -22,6 +22,159 @@ const DRONE_COLORS = [
   '#0D9488', // Teal-600 (UAV-08)
 ];
 
+function drawSafeRoundRect(ctx, x, y, width, height, radius) {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, width, height, radius);
+  } else {
+    const r = Math.min(radius, width / 2, height / 2);
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + width, y, x + width, y + height, r);
+    ctx.arcTo(x + width, y + height, x, y + height, r);
+    ctx.arcTo(x, y + height, x, y, r);
+    ctx.arcTo(x, y, x + width, y, r);
+    ctx.closePath();
+  }
+}
+
+// Realistic miniature quadcopter rendering for all drones on the map
+function drawRealisticMiniDrone(ctx, x, y, headingDeg, color, label, isStationed = false, timeSec = 0) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  // 1. Soft ground shadow underneath
+  const shadowScale = isStationed ? 0.9 : 1.15;
+  const shadowAlpha = isStationed ? 0.22 : 0.15;
+  ctx.save();
+  ctx.fillStyle = `rgba(15, 23, 42, ${shadowAlpha})`;
+  ctx.beginPath();
+  ctx.ellipse(0, 5, 14 * shadowScale, 7 * shadowScale, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // 2. Rotate to flight heading
+  const headingRad = (headingDeg * Math.PI) / 180;
+  ctx.rotate(headingRad);
+
+  // 3. Carbon Cross-Arms
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 2.4;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  // Arm 1: Front-Left to Rear-Right
+  ctx.moveTo(-9, -9);
+  ctx.lineTo(9, 9);
+  // Arm 2: Front-Right to Rear-Left
+  ctx.moveTo(9, -9);
+  ctx.lineTo(-9, 9);
+  ctx.stroke();
+
+  // 4. Brushless Motor Bells & Spinning Rotor Blur Discs
+  const rotorSpinSpeed = isStationed ? 12 : 36;
+  const rotorAngle = timeSec * rotorSpinSpeed;
+  const rotorPositions = [
+    [-9, -9],
+    [9, -9],
+    [-9, 9],
+    [9, 9],
+  ];
+
+  rotorPositions.forEach(([rx, ry], idx) => {
+    // Rotor translucent blur disc
+    ctx.beginPath();
+    ctx.arc(rx, ry, 6.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(2, 132, 199, 0.16)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(15, 23, 42, 0.22)';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+
+    // High-speed spinning blade line
+    ctx.save();
+    ctx.translate(rx, ry);
+    ctx.rotate(rotorAngle + (idx * Math.PI) / 2);
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(-5.5, 0);
+    ctx.lineTo(5.5, 0);
+    ctx.stroke();
+    // Safety colored blade tip (orange)
+    ctx.strokeStyle = '#ea580c';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(3.5, 0);
+    ctx.lineTo(5.5, 0);
+    ctx.stroke();
+    ctx.restore();
+
+    // Motor center hub
+    ctx.beginPath();
+    ctx.arc(rx, ry, 1.8, 0, Math.PI * 2);
+    ctx.fillStyle = '#0f172a';
+    ctx.fill();
+  });
+
+  // 5. Central Aerodynamic Fuselage
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 5.5, 4.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Top canopy with fleet color ring
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Forward heading indicator on nose
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(0, -4.5);
+  ctx.lineTo(2, -1.5);
+  ctx.lineTo(-2, -1.5);
+  ctx.closePath();
+  ctx.fill();
+
+  // Navigation lights
+  // Left port: Red
+  ctx.fillStyle = '#ef4444';
+  ctx.beginPath();
+  ctx.arc(-9, -9, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+  // Right starboard: Green
+  ctx.fillStyle = '#10b981';
+  ctx.beginPath();
+  ctx.arc(9, -9, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+
+  // 6. Drone Callsign & Status Pill
+  if (label) {
+    ctx.save();
+    ctx.font = '600 9px JetBrains Mono, monospace';
+    const textW = ctx.measureText(label).width;
+    const badgeW = textW + 10;
+    const badgeH = 16;
+    const badgeX = x - badgeW / 2;
+    const badgeY = y - 22;
+
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    drawSafeRoundRect(ctx, badgeX, badgeY, badgeW, badgeH, 4);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#0f172a';
+    ctx.fillText(label, badgeX + 5, badgeY + 11.5);
+    ctx.restore();
+  }
+}
+
 export default function OperationsMap({
   instance,
   schedule,
@@ -33,52 +186,79 @@ export default function OperationsMap({
   setIsPlaying,
   telemetry,
   securedTargets,
+  windSpeed: propWindSpeed,
+  windDir: propWindDir,
+  fleetSize: propFleetSize,
+  triggerLandingAnim,
+  onLandingAnimDone,
+  isSolving,
 }) {
+  const activeWindSpd = propWindSpeed ?? instance?.ambient_wind?.speed_mps ?? 3.5;
+  const activeWindDir = propWindDir ?? instance?.ambient_wind?.direction_deg ?? 45;
+  const activeFleetSize = propFleetSize ?? instance?.drones?.length ?? 3;
+
   // Sensor layer toggles
   const [showRadarHalos, setShowRadarHalos] = useState(false); // Default off to reduce clutter
   const [showFlightPaths, setShowFlightPaths] = useState(true);
   const [showRangeRings, setShowRangeRings] = useState(false); // Default off to reduce clutter
   const [showTacticalGrid, setShowTacticalGrid] = useState(true);
+  const [showWindStream, setShowWindStream] = useState(true);
   const [showUavIcons, setShowUavIcons] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [selectedInspectorObj, setSelectedInspectorObj] = useState('None (Overview)');
   const [hoveredTarget, setHoveredTarget] = useState(null);
 
+  // Cinematic Depot Touchdown Sequence State
+  const [landingState, setLandingState] = useState(null); // { progress: 0..1, phase: 'descending' | 'touchdown' | 'done' }
+
   const canvasRef = useRef(null);
 
-  // Flight pipeline progress fraction
-  const progressFrac = maxMissionTime > 0 ? missionTime / maxMissionTime : 0;
-  const p1 = progressFrac < 0.15 ? 'active' : 'completed';
-  const p2 = progressFrac >= 0.15 && progressFrac < 0.4 ? 'active' : progressFrac >= 0.4 ? 'completed' : 'pending';
-  const p3 = progressFrac >= 0.4 && progressFrac < 0.7 ? 'active' : progressFrac >= 0.7 ? 'completed' : 'pending';
-  const p4 = progressFrac >= 0.7 && progressFrac < 0.9 ? 'active' : progressFrac >= 0.9 ? 'completed' : 'pending';
-  const p5 = progressFrac >= 0.9 ? 'active' : 'pending';
-
-  // Animation frame ticker when isPlaying
+  // Landing sequence animation loop
   useEffect(() => {
+    if (!triggerLandingAnim) return;
+
     let animId;
-    let lastTimestamp = performance.now();
+    const startTime = performance.now();
+    const duration = 2400; // 2.4s total: 1.6s descent + 0.8s touchdown shockwave & badge
 
     const loop = (now) => {
-      const deltaSec = (now - lastTimestamp) / 1000;
-      lastTimestamp = now;
+      const elapsed = now - startTime;
+      const progress = Math.min(1.0, elapsed / duration);
+      const phase = progress < 0.65 ? 'descending' : progress < 0.95 ? 'touchdown' : 'done';
 
-      if (isPlaying) {
-        setMissionTime((prev) => {
-          const next = prev + deltaSec * 35 * playbackSpeed;
-          if (next >= maxMissionTime) {
-            setIsPlaying(false);
-            return maxMissionTime;
-          }
-          return next;
-        });
+      setLandingState({ progress, phase });
+
+      if (progress < 1.0) {
+        animId = requestAnimationFrame(loop);
+      } else {
+        setTimeout(() => {
+          setLandingState(null);
+          if (onLandingAnimDone) onLandingAnimDone();
+        }, 800);
       }
-      animId = requestAnimationFrame(loop);
     };
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [isPlaying, maxMissionTime, playbackSpeed, setMissionTime, setIsPlaying]);
+  }, [triggerLandingAnim, onLandingAnimDone]);
+
+  // Progressive reveal for paths and targets (avoids rapid flashing)
+  const [revealProgress, setRevealProgress] = useState(1.0);
+  useEffect(() => {
+    if (isSolving) {
+      setRevealProgress(0.15);
+    } else {
+      let start = performance.now();
+      let animId;
+      const animate = (now) => {
+        const t = Math.min(1.0, (now - start) / 600);
+        setRevealProgress(t);
+        if (t < 1.0) animId = requestAnimationFrame(animate);
+      };
+      animId = requestAnimationFrame(animate);
+      return () => cancelAnimationFrame(animId);
+    }
+  }, [isSolving, schedule]);
 
   // Derived coordinate bounds
   const targets = instance?.targets ?? [];
@@ -107,17 +287,18 @@ export default function OperationsMap({
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
-    const mx = (e.clientX - rect.left) * scaleX;
-    const my = (e.clientY - rect.top) * scaleY;
+    const mouseX = (e.clientX - rect.left) * scaleX;
+    const mouseY = (e.clientY - rect.top) * scaleY;
 
+    // Detect target hovering
     let closest = null;
-    let closestDist = 18;
+    let minDist = 14;
     targets.forEach((t) => {
       const cx = toCanvasX(t.x, canvas.width);
       const cy = toCanvasY(t.y, canvas.height);
-      const dist = Math.hypot(cx - mx, cy - my);
-      if (dist < closestDist) {
-        closestDist = dist;
+      const d = Math.hypot(mouseX - cx, mouseY - cy);
+      if (d < minDist) {
+        minDist = d;
         closest = t;
       }
     });
@@ -134,7 +315,7 @@ export default function OperationsMap({
     }
   };
 
-  // Draw 2D Tactical Map Canvas
+  // Draw 2D Tactical Map Canvas (Light Aerospace Glassmorphic Standard)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -144,13 +325,13 @@ export default function OperationsMap({
     const width = canvas.width;
     const height = canvas.height;
 
-    // Clear background with crisp off-white
-    ctx.fillStyle = '#fbfcfe';
+    // Clear background with crisp light aerospace tone
+    ctx.fillStyle = '#f8fafc';
     ctx.fillRect(0, 0, width, height);
 
-    // 1. Draw Tactical Grid (clean 60px step, ultra subtle)
+    // 1. Draw Tactical Grid (clean light slate grid)
     if (showTacticalGrid) {
-      ctx.strokeStyle = 'rgba(15, 23, 42, 0.035)';
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.045)';
       ctx.lineWidth = 1;
       const step = 60;
       for (let x = 0; x < width; x += step) {
@@ -167,12 +348,42 @@ export default function OperationsMap({
       }
     }
 
+    // 1b. Dynamic Atmospheric Wind Stream (Visually flows in real wind direction & speed)
+    if (showWindStream && activeWindSpd > 0.3) {
+      const windRad = (activeWindDir * Math.PI) / 180;
+      const wx = Math.cos(windRad);
+      const wy = -Math.sin(windRad); // Inverted canvas y
+      const flowSpeed = Math.min(activeWindSpd, 15) * 2.0;
+      const offset = (performance.now() * 0.04 * flowSpeed) % 80;
+
+      ctx.save();
+      ctx.strokeStyle = `rgba(2, 132, 199, ${Math.min(0.20, 0.06 + activeWindSpd * 0.012)})`;
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([8, 22]);
+      ctx.lineDashOffset = -offset;
+
+      const numLines = 9;
+      for (let i = 0; i < numLines; i++) {
+        const perpX = -wy;
+        const perpY = wx;
+        const offsetDist = (i - numLines / 2) * 65;
+        const cx = width / 2 + perpX * offsetDist;
+        const cy = height / 2 + perpY * offsetDist;
+
+        ctx.beginPath();
+        ctx.moveTo(cx - wx * width, cy - wy * height);
+        ctx.lineTo(cx + wx * width, cy + wy * height);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // Launch Base Depot
     const depotNode = targets.find((t) => (instance?.depot_ids ?? [0]).includes(t.id)) || targets[0];
     const depotX = depotNode ? toCanvasX(depotNode.x, width) : width / 2;
     const depotY = depotNode ? toCanvasY(depotNode.y, height) : height / 2;
 
-    // 2. Range Rings (clean, non-cluttering)
+    // 2. Range Rings (clean light theme)
     if (showRangeRings) {
       ctx.strokeStyle = 'rgba(15, 23, 42, 0.06)';
       ctx.setLineDash([4, 6]);
@@ -188,7 +399,7 @@ export default function OperationsMap({
     if (showRangeRings) {
       const sweepAngle = (performance.now() / 1800) % (Math.PI * 2);
       const grad = ctx.createRadialGradient(depotX, depotY, 0, depotX, depotY, 280);
-      grad.addColorStop(0, 'rgba(2, 132, 199, 0.05)');
+      grad.addColorStop(0, 'rgba(2, 132, 199, 0.08)');
       grad.addColorStop(1, 'rgba(2, 132, 199, 0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -198,7 +409,25 @@ export default function OperationsMap({
       ctx.fill();
     }
 
-    // 4. Planned Flight Corridors (crisp single stroke, no double-dash clutter)
+    // Base Depot Marker on Light Canvas
+    ctx.beginPath();
+    ctx.arc(depotX, depotY, 18, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(2, 132, 199, 0.10)';
+    ctx.fill();
+
+    ctx.fillStyle = '#0284C7';
+    ctx.beginPath();
+    ctx.arc(depotX, depotY, 7.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#0284C7';
+    ctx.font = '700 10px JetBrains Mono, monospace';
+    ctx.fillText('DEPOT', depotX + 13, depotY + 3.5);
+
+    // 4. Planned Flight Corridors (progressive reveal, high-contrast)
     const routes = schedule?.assigned_routes ?? [];
     if (showFlightPaths) {
       routes.forEach((route, rIdx) => {
@@ -207,8 +436,9 @@ export default function OperationsMap({
         if (wps.length < 2) return;
 
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1.8;
-        ctx.globalAlpha = 0.75;
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.globalAlpha = Math.min(1.0, 0.2 + revealProgress * 0.78);
         ctx.beginPath();
         wps.forEach((wp, idx) => {
           const node = targets.find((t) => t.id === wp.node_id);
@@ -224,139 +454,222 @@ export default function OperationsMap({
       });
     }
 
-    // 5. Target Nodes (Clean micro-dots, NO text clutter unless hovered/inspected!)
+    // 5. Target Nodes with Sector/Drone Color-Coding (Clean on Light Canvas)
     const securedSet = new Set(securedTargets ?? []);
+    const targetToDroneMap = new Map();
+    routes.forEach((route, rIdx) => {
+      const color = DRONE_COLORS[rIdx % DRONE_COLORS.length];
+      (route.target_ids ?? []).forEach((tid) => {
+        targetToDroneMap.set(tid, { color, droneId: route.drone_id });
+      });
+    });
+
+    ctx.globalAlpha = Math.min(1.0, 0.4 + revealProgress * 0.6);
     targets.forEach((node) => {
       const isDepot = (instance?.depot_ids ?? [0]).includes(node.id);
+      if (isDepot) return; // Already drawn depot above
+
       const cx = toCanvasX(node.x, width);
       const cy = toCanvasY(node.y, height);
       const isSecured = securedSet.has(node.id);
       const isHovered = hoveredTarget && hoveredTarget.id === node.id;
       const isInspected = selectedInspectorObj === `Target #${node.id.toString().padStart(2, '0')}`;
 
-      if (isDepot) {
-        // Base Depot Marker
-        ctx.fillStyle = '#0284C7';
-        ctx.beginPath();
-        ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+      const radius = isHovered || isInspected ? 6 : isSecured ? 4.5 : 3.5;
+      const droneInfo = targetToDroneMap.get(node.id);
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+
+      if (isSecured) {
+        ctx.fillStyle = '#059669';
         ctx.fill();
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Label
-        ctx.fillStyle = '#0284C7';
-        ctx.font = '600 10px Inter, sans-serif';
-        ctx.fillText('DEPOT', cx + 11, cy + 3.5);
-      } else {
-        // Target Node: Minimalist clean dot
-        const radius = isHovered || isInspected ? 6 : isSecured ? 4.5 : 3.5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-
-        if (isSecured) {
-          ctx.fillStyle = '#059669';
-          ctx.fill();
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 1.5;
-          ctx.stroke();
-        } else {
-          ctx.fillStyle = isHovered || isInspected ? '#0284C7' : '#cbd5e1';
-          ctx.fill();
-          ctx.strokeStyle = isHovered || isInspected ? '#FFFFFF' : '#94a3b8';
-          ctx.lineWidth = 1;
-          ctx.stroke();
-        }
-
-        // ONLY DRAW POPUP BADGE ON HOVER OR SELECTION (Eliminates 64 overlapping numbers!)
-        if (isHovered || isInspected) {
-          ctx.strokeStyle = isSecured ? 'rgba(5, 150, 105, 0.4)' : 'rgba(2, 132, 199, 0.4)';
-          ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
-          ctx.stroke();
-
-          // Floating dark tooltip pill
-          const label = `Target #${node.id} · ${(node.priority_score || 0).toFixed(0)} pts`;
-          ctx.font = '600 10px Inter, sans-serif';
-          const textW = ctx.measureText(label).width;
-
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
-          ctx.beginPath();
-          ctx.roundRect(cx - textW / 2 - 6, cy - radius - 24, textW + 12, 18, 5);
-          ctx.fill();
-
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillText(label, cx - textW / 2, cy - radius - 11);
-        }
-      }
-    });
-
-    // 6. Active Drone Positions and Glyphs
-    const telemetryList = telemetry ?? [];
-    telemetryList.forEach((droneTelem, dIdx) => {
-      const color = DRONE_COLORS[dIdx % DRONE_COLORS.length];
-      const cx = toCanvasX(droneTelem.x, width);
-      const cy = toCanvasY(droneTelem.y, height);
-      const headingRad = ((droneTelem.heading_deg || 0) * Math.PI) / 180;
-
-      // Radar Halo (optional, subtle)
-      if (showRadarHalos && droneTelem.flight_phase !== 'RECOVERED') {
-        const haloRadiusPx = ((50 / (maxX - minX)) * (width - 80)) || 28;
-        ctx.beginPath();
-        ctx.arc(cx, cy, haloRadiusPx, 0, Math.PI * 2);
-        ctx.fillStyle = `${color}0D`;
-        ctx.fill();
-        ctx.strokeStyle = `${color}35`;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      if (showUavIcons) {
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(headingRad);
-
-        // Quadcopter Arms
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.moveTo(-8, -8);
-        ctx.lineTo(8, 8);
-        ctx.moveTo(8, -8);
-        ctx.lineTo(-8, 8);
-        ctx.stroke();
-
-        // Fuselage
-        ctx.fillStyle = '#FFFFFF';
-        ctx.beginPath();
-        ctx.arc(0, 0, 3.5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
         ctx.stroke();
-
-        // Heading nose
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(0, -11);
-        ctx.lineTo(3.5, -6);
-        ctx.lineTo(-3.5, -6);
-        ctx.closePath();
+      } else if (droneInfo) {
+        ctx.fillStyle = droneInfo.color;
         ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = isHovered || isInspected ? '#0284C7' : '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = isHovered || isInspected ? '#0284C7' : '#94a3b8';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
 
-        ctx.restore();
+      // Legible Node ID on light canvas
+      ctx.fillStyle = '#64748b';
+      ctx.font = '500 8.5px JetBrains Mono, monospace';
+      ctx.fillText(`${node.id}`, cx + radius + 3, cy + 2.5);
 
-        // Sleek callsign label
-        ctx.fillStyle = '#0F172A';
+      // Tooltip pill on hover or selection
+      if (isHovered || isInspected) {
+        const accentColor = droneInfo ? droneInfo.color : isSecured ? '#059669' : '#0284C7';
+        ctx.strokeStyle = accentColor;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+        ctx.stroke();
+
+        const droneTag = droneInfo ? ` (${droneInfo.droneId})` : '';
+        const statusTag = isSecured ? ' · SECURED' : '';
+        const label = `Target #${node.id} · ${(node.priority_score || 0).toFixed(0)} pts${droneTag}${statusTag}`;
         ctx.font = '600 10px Inter, sans-serif';
-        ctx.fillText(
-          `${droneTelem.drone_id} (${(droneTelem.battery_percent || 100).toFixed(0)}%)`,
-          cx + 12,
-          cy - 5
-        );
+        const textW = ctx.measureText(label).width;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+        ctx.beginPath();
+        drawSafeRoundRect(ctx, cx - textW / 2 - 8, cy - radius - 25, textW + 16, 20, 5);
+        ctx.fill();
+        ctx.strokeStyle = accentColor;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillText(label, cx - textW / 2, cy - radius - 11);
       }
     });
+    ctx.globalAlpha = 1.0;
+
+    // 6. Drone Fleet Display (Stationed at Depot while Solving or Flying in Mission)
+    const timeSec = performance.now() / 1000;
+    const isStationed = isSolving || (!isPlaying && missionTime === 0);
+
+    if (isStationed && !landingState) {
+      // Drones are parked at the DEPOT while solving or waiting for execution!
+      const totalFleet = Math.max(1, activeFleetSize);
+      for (let dIdx = 0; dIdx < totalFleet; dIdx++) {
+        const color = DRONE_COLORS[dIdx % DRONE_COLORS.length];
+        // Park UAV-01 directly on depot, others staggered neatly beside depot
+        const parkX = dIdx === 0 ? depotX : depotX + (dIdx - (totalFleet - 1) / 2) * 28;
+        const parkY = dIdx === 0 ? depotY : depotY + 16;
+        const droneLabel = `UAV-0${dIdx + 1} (100%)`;
+
+        drawRealisticMiniDrone(ctx, parkX, parkY, 0, color, droneLabel, true, timeSec);
+      }
+
+      // Clean Stationed / Solving Status Badge over Depot
+      ctx.save();
+      const statusText = isSolving 
+        ? 'UAV FLEET AT DEPOT · OPTIMIZING FLIGHT CORRIDORS...' 
+        : 'UAV FLEET STATIONED AT DEPOT · READY FOR MISSION';
+      ctx.font = '600 10.5px Inter, sans-serif';
+      const sW = ctx.measureText(statusText).width;
+      const bX = depotX - sW / 2 - 10;
+      const bY = depotY - 44;
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+      drawSafeRoundRect(ctx, bX, bY, sW + 20, 22, 6);
+      ctx.fill();
+      ctx.strokeStyle = isSolving ? '#f59e0b' : '#10b981';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+
+      // Pulsing status dot
+      ctx.fillStyle = isSolving ? '#f59e0b' : '#10b981';
+      ctx.beginPath();
+      ctx.arc(bX + 11, bY + 11, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.fillText(statusText, bX + 20, bY + 14.5);
+      ctx.restore();
+
+    } else if (!landingState) {
+      // Drones in active flight along corridors
+      const telemetryList = telemetry ?? [];
+      telemetryList.forEach((droneTelem, dIdx) => {
+        const color = DRONE_COLORS[dIdx % DRONE_COLORS.length];
+        const cx = toCanvasX(droneTelem.x, width);
+        const cy = toCanvasY(droneTelem.y, height);
+        const headingDeg = droneTelem.heading_deg || 0;
+        const gSpeed = (droneTelem.ground_speed_mps ?? droneTelem.speed_mps ?? 14.5).toFixed(1);
+        const droneLabel = `${droneTelem.drone_id} (${gSpeed}m/s)`;
+
+        drawRealisticMiniDrone(ctx, cx, cy, headingDeg, color, droneLabel, false, timeSec);
+      });
+    }
+
+    // 7. Dynamic Depot Touchdown Sequence (when intro hands off)
+    if (landingState) {
+      const { progress } = landingState;
+      const totalFleet = Math.max(1, activeFleetSize);
+
+      for (let dIdx = 0; dIdx < totalFleet; dIdx++) {
+        const color = DRONE_COLORS[dIdx % DRONE_COLORS.length];
+        // Target parking spot at depot: matches exactly the stationed position
+        const targetX_d = dIdx === 0 ? depotX : depotX + (dIdx - (totalFleet - 1) / 2) * 28;
+        const targetY_d = dIdx === 0 ? depotY : depotY + 16;
+
+        // Ingress starting position above top of canvas with echelon stagger
+        const ingressOffset = (dIdx - (totalFleet - 1) / 2) * 45;
+        const startX_d = targetX_d + 60 + ingressOffset;
+        const startY_d = -80 - dIdx * 25;
+
+        // Slight micro-stagger for wingmen behind lead UAV-01
+        const droneStagger = dIdx === 0 ? 0 : 0.04 + dIdx * 0.03;
+        const descentDuration = 0.65 - droneStagger * 0.4;
+        const descentFrac = Math.max(0, Math.min(1.0, (progress - droneStagger) / Math.max(0.2, descentDuration)));
+        const easeT = 1 - Math.pow(1 - descentFrac, 3);
+
+        const curX = startX_d + (targetX_d - startX_d) * easeT;
+        const curY = startY_d + (targetY_d - startY_d) * easeT;
+
+        // Soft ground shadow growing at each drone's pad
+        const shadowAlpha = (dIdx === 0 ? 0.32 : 0.22) * easeT;
+        const shadowRadius = 8 + 10 * easeT;
+        ctx.save();
+        ctx.fillStyle = `rgba(15, 23, 42, ${shadowAlpha})`;
+        ctx.beginPath();
+        ctx.ellipse(targetX_d, targetY_d + 4, shadowRadius * 1.4, shadowRadius * 0.7, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // Draw incoming realistic mini drone descending
+        const isLanded = descentFrac >= 0.99;
+        const bank = isLanded ? 0 : (1 - easeT) * (14 + (dIdx % 2 === 0 ? 4 : -4));
+        const droneLabel = isLanded ? `UAV-0${dIdx + 1} (PARKED)` : `UAV-0${dIdx + 1} (APPROACH)`;
+
+        drawRealisticMiniDrone(ctx, curX, curY, bank, color, droneLabel, isLanded, timeSec);
+      }
+
+      // Touchdown shockwave pulse and badge
+      if (progress >= 0.65) {
+        const pulseFrac = (progress - 0.65) / 0.35;
+        const pulseRadius = 10 + pulseFrac * 70;
+        const pulseAlpha = Math.max(0, 1 - pulseFrac);
+
+        ctx.save();
+        ctx.strokeStyle = `rgba(16, 185, 129, ${pulseAlpha})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(depotX, depotY, pulseRadius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+
+        // Touchdown confirmation badge
+        ctx.save();
+        const badge = totalFleet > 1 
+          ? `FLEET (${totalFleet} UAVs) TOUCHDOWN · DEPOT ONLINE`
+          : 'UAV-01 TOUCHDOWN · DEPOT ONLINE';
+        ctx.font = 'bold 10px Inter, sans-serif';
+        const bW = ctx.measureText(badge).width;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+        ctx.beginPath();
+        drawSafeRoundRect(ctx, depotX - bW / 2 - 8, depotY - 34, bW + 16, 20, 5);
+        ctx.fill();
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        ctx.fillStyle = '#059669';
+        ctx.fillText(badge, depotX - bW / 2, depotY - 20);
+        ctx.restore();
+      }
+    }
   }, [
     instance,
     schedule,
@@ -370,9 +683,16 @@ export default function OperationsMap({
     showFlightPaths,
     showRangeRings,
     showTacticalGrid,
+    showWindStream,
     showUavIcons,
     hoveredTarget,
     selectedInspectorObj,
+    landingState,
+    revealProgress,
+    isSolving,
+    isPlaying,
+    missionTime,
+    activeFleetSize,
   ]);
 
   // Context Inspector Calculations
@@ -394,7 +714,8 @@ export default function OperationsMap({
   const visitedCount = securedTargets?.length ?? 0;
   const totalTargetsCount = instance?.target_nodes?.length ?? 0;
   const coveragePct = totalTargetsCount > 0 ? (visitedCount / totalTargetsCount) * 100 : 0;
-  const minReserveAll = (schedule?.assigned_routes ?? []).reduce(
+  const routes = schedule?.assigned_routes ?? [];
+  const minReserveAll = routes.reduce(
     (min, r) => Math.min(min, r.final_reserve_percent ?? 100),
     100
   );
@@ -448,6 +769,15 @@ export default function OperationsMap({
 
           <button
             type="button"
+            onClick={() => setShowWindStream(!showWindStream)}
+            className={`segmented-item text-xs flex items-center gap-1.5 ${showWindStream ? 'segmented-item-active' : ''}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${showWindStream ? 'bg-sky-500' : 'bg-slate-300'}`} />
+            <span>Wind Stream</span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowRangeRings(!showRangeRings)}
             className={`segmented-item text-xs flex items-center gap-1.5 ${showRangeRings ? 'segmented-item-active' : ''}`}
           >
@@ -477,25 +807,70 @@ export default function OperationsMap({
             onMouseMove={handleCanvasMouseMove}
             onMouseLeave={handleCanvasMouseLeave}
             onClick={handleCanvasClick}
-            className="w-full h-[500px] object-cover block cursor-crosshair bg-[#fbfcfe]"
+            className="w-full h-[500px] object-cover block cursor-crosshair bg-[#f8fafc]"
           />
 
-          {/* Floating Subtle HUD Badges */}
+          {/* Floating Tactical Status Badges */}
           <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
-            <div className="px-2.5 py-1 rounded-md text-[11px] font-sans text-slate-700 font-medium bg-white/90 border border-slate-200/80 shadow-xs flex items-center gap-1.5 backdrop-blur-md">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              <span>Tactical SITL • 60 FPS</span>
+            <div className="px-2.5 py-1.5 rounded-xl text-[11px] font-mono text-slate-700 font-medium bg-white/92 border border-slate-200/90 shadow-sm flex items-center gap-2 backdrop-blur-md">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span>TACTICAL HUD // 60FPS SITL • {routes.length || activeFleetSize} UAVs</span>
             </div>
             {hoveredTarget && (
-              <div className="px-2.5 py-1 rounded-md text-[11px] font-sans text-sky-700 font-medium bg-sky-50/95 border border-sky-200/80 shadow-xs backdrop-blur-md">
-                Hovering Target #{hoveredTarget.id} (Click to inspect)
+              <div className="px-2.5 py-1.5 rounded-xl text-[11px] font-mono text-sky-700 font-medium bg-white/92 border border-sky-300/80 shadow-sm backdrop-blur-md">
+                TARGET #{hoveredTarget.id} ({(hoveredTarget.priority_score || 0).toFixed(0)} PTS)
               </div>
             )}
           </div>
 
-          <div className="absolute top-3 right-3 pointer-events-none">
-            <div className="px-2.5 py-1 rounded-md text-[11px] font-mono text-slate-700 bg-white/90 border border-slate-200/80 shadow-xs backdrop-blur-md">
-              MET T+{missionTime.toFixed(0).padStart(4, '0')}s / {maxMissionTime.toFixed(0).padStart(4, '0')}s
+          {/* Dynamic Tactical Wind Vector Compass & Clock HUD */}
+          <div className="absolute top-3 right-3 flex items-center gap-2 pointer-events-none">
+            <div className="px-3 py-1.5 rounded-xl text-xs bg-white/92 border border-slate-200/90 shadow-sm flex items-center gap-3 backdrop-blur-md font-mono text-slate-700">
+              {/* Compass Dial & Vector */}
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-5 h-5 rounded-full border border-sky-300 bg-sky-50 flex items-center justify-center transition-transform duration-300 shadow-2xs"
+                  style={{ transform: `rotate(${-activeWindDir}deg)` }}
+                  title={`Wind vector: ${activeWindSpd.toFixed(1)} m/s towards ${activeWindDir}°`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                    <polyline points="12 5 19 12 12 19" />
+                  </svg>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 uppercase tracking-wider block leading-none">
+                    WIND VECTOR
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-800 font-mono">
+                    {activeWindSpd.toFixed(1)} m/s · {Math.round(activeWindDir)}°
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-5 w-px bg-slate-200" />
+
+              {/* Groundspeed Envelope */}
+              <div>
+                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block leading-none">
+                  Vg Window
+                </span>
+                <span className="text-[11px] font-mono font-semibold text-sky-700">
+                  {Math.max(1.0, 14.5 - activeWindSpd).toFixed(1)} – {(14.5 + activeWindSpd).toFixed(1)} m/s
+                </span>
+              </div>
+
+              <div className="h-5 w-px bg-slate-200" />
+
+              {/* Mission Clock */}
+              <div>
+                <span className="text-[10px] text-slate-400 font-medium uppercase tracking-wider block leading-none">
+                  Mission Clock
+                </span>
+                <span className="text-[11px] font-mono font-semibold text-slate-700">
+                  T+{missionTime.toFixed(0).padStart(4, '0')}s
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -677,9 +1052,9 @@ export default function OperationsMap({
                 </span>
               </div>
               <div className="p-2 rounded-lg bg-white/90 border border-slate-200/70 shadow-xs">
-                <span className="text-[10px] text-slate-400 block mb-0.5">Groundspeed</span>
+                <span className="text-[10px] text-slate-400 block mb-0.5">Groundspeed (GNSS)</span>
                 <span className="text-slate-800 font-bold text-sm font-mono">
-                  {(activeTelemMap[selectedInspectorObj]?.speed_mps ?? 14.5).toFixed(1)} m/s
+                  {(activeTelemMap[selectedInspectorObj]?.ground_speed_mps ?? activeTelemMap[selectedInspectorObj]?.speed_mps ?? 14.5).toFixed(1)} m/s
                 </span>
               </div>
               <div className="p-2 rounded-lg bg-white/90 border border-slate-200/70 shadow-xs">
@@ -696,7 +1071,7 @@ export default function OperationsMap({
               </div>
               <div className="p-2 rounded-lg bg-white/90 border border-slate-200/70 shadow-xs">
                 <span className="text-[10px] text-slate-400 block mb-0.5">Current Target</span>
-                <span className="text-slate-800 font-medium">
+                <span className="text-slate-800 font-medium truncate block">
                   {activeTelemMap[selectedInspectorObj]?.target_name ?? 'DEPOT'}
                 </span>
               </div>
@@ -713,8 +1088,16 @@ export default function OperationsMap({
                 </span>
               </div>
               <div className="p-2 rounded-lg bg-white/90 border border-slate-200/70 shadow-xs">
-                <span className="text-[10px] text-slate-400 block mb-0.5">Comm Link RSSI</span>
-                <span className="text-emerald-600 font-bold font-mono">99.8%</span>
+                <span className="text-[10px] text-slate-400 block mb-0.5">Wind Impact</span>
+                <span className={`font-bold font-mono text-[11px] block truncate ${
+                  (activeTelemMap[selectedInspectorObj]?.wind_along_mps ?? 0) > 0.5 
+                    ? 'text-emerald-600' 
+                    : (activeTelemMap[selectedInspectorObj]?.wind_along_mps ?? 0) < -0.5 
+                      ? 'text-amber-700' 
+                      : 'text-sky-700'
+                }`}>
+                  {activeTelemMap[selectedInspectorObj]?.wind_effect ?? 'Nominal'} ({(activeTelemMap[selectedInspectorObj]?.wind_along_mps ?? 0) >= 0 ? '+' : ''}{(activeTelemMap[selectedInspectorObj]?.wind_along_mps ?? 0).toFixed(1)} m/s)
+                </span>
               </div>
             </div>
           </div>

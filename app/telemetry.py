@@ -8,6 +8,7 @@ from typing import Any
 import pandas as pd
 
 from core.contracts import CandidateRoute, DroneSpec, FleetSchedule, InstanceContext
+from core.physics import calculate_cruise_power, resolve_groundspeed, wind_to_vector
 
 
 def calculate_heading_deg(x1: float, y1: float, x2: float, y2: float) -> float:
@@ -144,19 +145,59 @@ def interpolate_drone_state(
 
             hdg = calculate_heading_deg(node_curr.x, node_curr.y, node_next.x, node_next.y)
 
+            dx = node_next.x - node_curr.x
+            dy = node_next.y - node_curr.y
+            wind_deg = math.degrees(wind_dir_rad)
+            wind_vec = wind_to_vector(wind_spd, wind_deg)
+            vg, _ = resolve_groundspeed((dx, dy), wind_vec, drone.cruise_speed)
+            if not math.isfinite(vg) or vg <= 0:
+                vg = drone.cruise_speed
+
+            dist = math.hypot(dx, dy)
+            u_x, u_y = (dx / dist, dy / dist) if dist > 1e-6 else (1.0, 0.0)
+            w_x, w_y = wind_vec
+            wind_along_track = w_x * u_x + w_y * u_y  # positive = tailwind, negative = headwind
+            crosswind = abs(-w_x * u_y + w_y * u_x)
+
+            cruise_power = calculate_cruise_power(drone.cruise_speed)
+            power_adj = max(
+                80.0,
+                min(
+                    380.0,
+                    cruise_power * (1.0 - 0.35 * (wind_along_track / max(drone.cruise_speed, 1.0))),
+                ),
+            )
+
+            wind_desc = (
+                f"Tailwind (+{wind_along_track:.1f} m/s)"
+                if wind_along_track > 0.6
+                else (
+                    f"Headwind ({wind_along_track:.1f} m/s)"
+                    if wind_along_track < -0.6
+                    else f"Crosswind ({crosswind:.1f} m/s)"
+                )
+            )
+
             return {
                 "drone_id": drone.id,
                 "x": float(x),
                 "y": float(y),
                 "z": float(z),
-                "status": f"CRUISE -> {node_next.name}",
+                "status": f"CRUISE -> {node_next.name} [{wind_desc}]",
                 "current_node_id": node_next.id,
                 "battery_percent": float(bat_pct),
                 "speed_mps": drone.cruise_speed,
-                "ground_speed_mps": drone.cruise_speed,
+                "ground_speed_mps": round(float(vg), 1),
                 "air_speed_mps": drone.cruise_speed,
                 "heading_deg": hdg,
-                "power_watts": round(nominal_power * 0.9, 1),
+                "power_watts": round(float(power_adj), 1),
+                "wind_along_mps": round(float(wind_along_track), 1),
+                "crosswind_mps": round(float(crosswind), 1),
+                "wind_effect": (
+                    "Tailwind"
+                    if wind_along_track > 0.6
+                    else ("Headwind" if wind_along_track < -0.6 else "Crosswind")
+                ),
                 "flight_phase": "TRANSIT_CRUISE",
                 "target_name": node_next.name,
             }

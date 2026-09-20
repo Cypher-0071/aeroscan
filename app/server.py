@@ -176,16 +176,17 @@ def solve():
 
 @app.route("/api/mock", methods=["GET"])
 def get_mock():
-    """Loads a precomputed mock mission fixture."""
-    mock_path = _PROJECT_ROOT / "tests" / "mock_schedule.json"
-    instance = load_instance("set_64", 3, 3.5, 45.0)
+    """Loads a precomputed mock mission fixture or solves for requested fleet size."""
+    fleet_size = request.args.get("fleet_size", 3, type=int)
+    instance = load_instance("set_64", fleet_size, 3.5, 45.0)
 
-    if mock_path.exists():
+    mock_path = _PROJECT_ROOT / "tests" / "mock_schedule.json"
+    if fleet_size == 2 and mock_path.exists():
         with open(mock_path, "r", encoding="utf-8") as f:
             mock_data = json.load(f)
         schedule = FleetSchedule.from_dict(mock_data)
     else:
-        pool = explore_route_pool(instance, max_iterations=50, time_limit_sec=0.5)
+        pool = explore_route_pool(instance, max_iterations=120, time_limit_sec=0.5, seed=42)
         schedule = solve_fleet_schedule(instance, pool, run_baselines=True)
 
     grasp_schedule = solve_grasp_baseline(instance)

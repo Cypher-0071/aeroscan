@@ -33,15 +33,20 @@ def construct_greedy_seed_route(
     instance: InstanceContext,
     alpha: float = 0.2,
     evaluator: EvaluatorContext | None = None,
+    candidate_target_ids: list[int] | None = None,
 ) -> list[int]:
     """
     Constructs an initial feasible route using a Randomized Restricted Candidate List (RCL, alpha = 0.2).
+    When candidate_target_ids is supplied, the route is built strictly within that target sector.
     """
     if evaluator is None:
         evaluator = EvaluatorContext(drone, instance)
 
     route: list[int] = []
-    available = set(t.id for t in instance.target_nodes)
+    if candidate_target_ids is not None:
+        available = set(candidate_target_ids)
+    else:
+        available = set(t.id for t in instance.target_nodes)
     curr_energy, curr_time, _ = evaluator.compute_route_totals(route)
 
     energy_mat = evaluator.energy_mat
@@ -167,12 +172,16 @@ class ALNSEngine:
         drone: DroneSpec,
         max_iterations: int = 800,
         time_limit_sec: float = 0.6,
+        candidate_target_ids: list[int] | None = None,
     ) -> list[CandidateRoute]:
         """Runs ALNS on a single drone and collects a pool of distinct feasible CandidateRoute objects."""
         start_t = time.perf_counter()
         evaluator = EvaluatorContext(drone, self.instance)
         discovered_routes: dict[frozenset[int], CandidateRoute] = {}
-        all_target_ids = [t.id for t in self.instance.target_nodes]
+        if candidate_target_ids is not None:
+            all_target_ids = list(candidate_target_ids)
+        else:
+            all_target_ids = [t.id for t in self.instance.target_nodes]
 
         # Reset weights & probabilities for independent drone exploration
         self.weights_d = np.ones(len(self.destroy_ops), dtype=np.float64)
@@ -182,7 +191,7 @@ class ALNSEngine:
 
         # 1. Seed construction with RCL
         seed_targets = construct_greedy_seed_route(
-            drone, self.instance, alpha=0.2, evaluator=evaluator
+            drone, self.instance, alpha=0.2, evaluator=evaluator, candidate_target_ids=all_target_ids
         )
         seed_targets = run_local_search_pipeline(
             seed_targets, all_target_ids, drone, self.instance, evaluator=evaluator
@@ -235,11 +244,23 @@ class ALNSEngine:
             # Destroy step
             destroy_fn = self.destroy_ops[d_idx]
             rem_route, _ = destroy_fn(current_route, q, drone, self.instance, evaluator=evaluator)
+            if rem_route:
+                eval_rem = evaluate_route_trajectory(rem_route, drone, self.instance, evaluator=evaluator)
+                if eval_rem is not None:
+                    k_rem = frozenset(rem_route)
+                    if k_rem not in discovered_routes:
+                        discovered_routes[k_rem] = eval_rem
 
             # Repair step
             repair_fn = self.repair_ops[r_idx]
             unassigned = [tid for tid in all_target_ids if tid not in set(rem_route)]
             new_route = repair_fn(rem_route, unassigned, drone, self.instance, evaluator=evaluator)
+            if new_route:
+                eval_part = evaluate_route_trajectory(new_route, drone, self.instance, evaluator=evaluator)
+                if eval_part is not None:
+                    k_part = frozenset(new_route)
+                    if k_part not in discovered_routes:
+                        discovered_routes[k_part] = eval_part
 
             # Local search & immediate slack-filling
             new_route = run_local_search_pipeline(
@@ -324,6 +345,51 @@ class ALNSEngine:
         return list(discovered_routes.values())
 
 
+def partition_targets_by_sectors(
+    instance: InstanceContext,
+    num_sectors: int,
+) -> dict[str, list[int]]:
+    """
+    Partitions target nodes among the fleet by azimuth angle relative to the depot.
+    Guarantees non-overlapping spatial sectors and mutual flight corridor deconfliction.
+    """
+    if num_sectors <= 1 or not instance.drones:
+        all_ids = [t.id for t in instance.target_nodes]
+        return {d.id: list(all_ids) for d in instance.drones}
+
+    # Reference depot
+    launch_depot_id = instance.drones[0].launch_depot_id
+    depot = next((t for t in instance.targets if t.id == launch_depot_id), instance.targets[0])
+
+    target_nodes = instance.target_nodes
+    if not target_nodes:
+        return {d.id: [] for d in instance.drones}
+
+    # Calculate azimuth angle in [0, 2*pi)
+    target_angles: list[tuple[float, int]] = []
+    for t in target_nodes:
+        dx = t.x - depot.x
+        dy = t.y - depot.y
+        angle = math.atan2(dy, dx) % (2.0 * math.pi)
+        target_angles.append((angle, t.id))
+
+    # Sort radially by azimuth
+    target_angles.sort(key=lambda x: x[0])
+
+    # Assign contiguous angular slices to each drone
+    total_targets = len(target_angles)
+    chunk = total_targets // num_sectors
+    sectors: dict[str, list[int]] = {}
+
+    for i, drone in enumerate(instance.drones):
+        start_idx = i * chunk
+        end_idx = (i + 1) * chunk if i < num_sectors - 1 else total_targets
+        sec_targets = [tid for _, tid in target_angles[start_idx:end_idx]]
+        sectors[drone.id] = sec_targets
+
+    return sectors
+
+
 def explore_route_pool(
     instance: InstanceContext,
     max_iterations: int = 800,
@@ -338,6 +404,8 @@ def explore_route_pool(
     2. Every route satisfies: total_energy <= 0.85 * drone.battery_joules.
     3. Every route satisfies: total_flight_time <= drone.max_flight_time.
     4. Waypoint arrival and departure timestamps are continuous and dwell times are added.
+    5. Each drone is assigned an exclusive spatial sector around the depot to guarantee
+       non-overlapping flight corridors.
     """
     if seed is not None:
         random.seed(seed)
@@ -351,6 +419,7 @@ def explore_route_pool(
         return pool
 
     start_t = time.perf_counter()
+    sector_map = partition_targets_by_sectors(instance, num_drones)
 
     for i, drone in enumerate(instance.drones):
         elapsed = time.perf_counter() - start_t
@@ -358,10 +427,12 @@ def explore_route_pool(
         remaining_drones = num_drones - i
         per_drone_time = remaining_time / remaining_drones
 
+        drone_targets = sector_map.get(drone.id)
         routes = engine.explore_for_drone(
             drone=drone,
             max_iterations=max_iterations,
             time_limit_sec=per_drone_time,
+            candidate_target_ids=drone_targets,
         )
         pool.routes_by_drone[drone.id] = routes
 

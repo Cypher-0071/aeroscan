@@ -51,14 +51,15 @@ def solve_set_packing(
         if len(vars_list) > 1:
             model.Add(sum(vars_list) <= 1)
 
-    # Objective: Maximize total collected reward
+    # Objective: Maximize total collected reward with active fleet deployment incentive
     # Scale float rewards to integers for CP-SAT
     scale_factor = 1000
     obj_terms = []
     for drone_id, routes in route_pool.routes_by_drone.items():
         for r_idx, route in enumerate(routes):
             scaled_reward = int(round(route.total_reward * scale_factor))
-            obj_terms.append(scaled_reward * z_vars[(drone_id, r_idx)])
+            deployment_bonus = 100_000 if len(route.target_ids) > 0 else 0
+            obj_terms.append((scaled_reward + deployment_bonus) * z_vars[(drone_id, r_idx)])
 
     if obj_terms:
         model.Maximize(sum(obj_terms))

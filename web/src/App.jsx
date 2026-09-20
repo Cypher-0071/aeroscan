@@ -6,6 +6,7 @@ import FleetTelemetry from './components/FleetTelemetry';
 import OptimizationLab from './components/OptimizationLab';
 import EnergyBattery from './components/EnergyBattery';
 import MissionExport from './components/MissionExport';
+import IntroCinematic from './components/IntroCinematic';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('map');
@@ -13,6 +14,10 @@ export default function App() {
   const [fleetSize, setFleetSize] = useState(3);
   const [windSpeed, setWindSpeed] = useState(3.5);
   const [windDir, setWindDir] = useState(45.0);
+
+  // Cinematic Intro Animation & Depot Landing State
+  const [showIntro, setShowIntro] = useState(true);
+  const [triggerLandingAnim, setTriggerLandingAnim] = useState(false);
 
   const [instance, setInstance] = useState(null);
   const [schedule, setSchedule] = useState(null);
@@ -26,6 +31,15 @@ export default function App() {
   const [isSolving, setIsSolving] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
+  const handleIntroComplete = useCallback(() => {
+    setShowIntro(false);
+    setActiveTab('map');
+    // Trigger the drone flying in from top and landing onto the depot
+    setTimeout(() => {
+      setTriggerLandingAnim(true);
+    }, 150);
+  }, []);
+
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -35,7 +49,7 @@ export default function App() {
   useEffect(() => {
     const bootInit = async () => {
       try {
-        const res = await fetch('/api/mock');
+        const res = await fetch(`/api/mock?fleet_size=${fleetSize}`);
         if (res.ok) {
           const data = await res.json();
           setInstance(data.instance);
@@ -58,17 +72,22 @@ export default function App() {
   }, []);
 
   // Solve Optimizer
-  const handleRunOptimizer = async () => {
+  const handleRunOptimizer = async (overrideParams = {}) => {
     setIsSolving(true);
+    const runFleetSize = overrideParams.fleetSize ?? fleetSize;
+    const runScenario = overrideParams.scenario ?? scenario;
+    const runWindSpeed = overrideParams.windSpeed ?? windSpeed;
+    const runWindDir = overrideParams.windDir ?? windDir;
+
     try {
       const res = await fetch('/api/solve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scenario,
-          fleet_size: fleetSize,
-          wind_speed: windSpeed,
-          wind_dir: windDir,
+          scenario: runScenario,
+          fleet_size: runFleetSize,
+          wind_speed: runWindSpeed,
+          wind_dir: runWindDir,
           max_iterations: 200,
           time_limit_sec: 1.2,
         }),
@@ -84,7 +103,8 @@ export default function App() {
       setSecuredTargets(data.secured_targets_init || []);
       setMissionTime(0.0);
       setIsPlaying(false);
-      showToast(`Swarm solved: ${data.schedule.cumulative_reward.toFixed(0)} pts in ${data.schedule.solve_time_seconds.toFixed(2)}s`);
+      const activeCount = data.schedule?.assigned_routes?.length || 0;
+      showToast(`Fleet deployed: ${activeCount} UAVs scouting ${data.schedule.cumulative_reward.toFixed(0)} pts in ${data.schedule.solve_time_seconds.toFixed(2)}s`);
     } catch (err) {
       console.error('Error running optimizer:', err);
       showToast('Solver execution failed. Check backend service.');
@@ -92,6 +112,19 @@ export default function App() {
       setIsSolving(false);
     }
   };
+
+  // Debounced auto-solve on slider/preset changes
+  const isInitialBootRef = useRef(true);
+  useEffect(() => {
+    if (isInitialBootRef.current) {
+      isInitialBootRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      handleRunOptimizer({ fleetSize, scenario, windSpeed, windDir });
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [fleetSize, scenario, windSpeed, windDir]);
 
   // Load Mock Fixture
   const handleLoadMock = async () => {
@@ -183,6 +216,13 @@ export default function App() {
           instance={instance}
           schedule={schedule}
           isSolving={isSolving}
+          windSpeed={windSpeed}
+          windDir={windDir}
+          fleetSize={fleetSize}
+          onReplayIntro={() => {
+            setShowIntro(true);
+            setTriggerLandingAnim(false);
+          }}
         />
 
         {/* Content Area */}
@@ -199,6 +239,12 @@ export default function App() {
               setIsPlaying={setIsPlaying}
               telemetry={telemetry}
               securedTargets={securedTargets}
+              windSpeed={windSpeed}
+              windDir={windDir}
+              fleetSize={fleetSize}
+              isSolving={isSolving}
+              triggerLandingAnim={triggerLandingAnim}
+              onLandingAnimDone={() => setTriggerLandingAnim(false)}
             />
           )}
 
@@ -208,6 +254,9 @@ export default function App() {
               schedule={schedule}
               telemetry={telemetry}
               missionTime={missionTime}
+              windSpeed={windSpeed}
+              windDir={windDir}
+              fleetSize={fleetSize}
             />
           )}
 
@@ -224,6 +273,9 @@ export default function App() {
               instance={instance}
               schedule={schedule}
               missionTime={missionTime}
+              windSpeed={windSpeed}
+              windDir={windDir}
+              fleetSize={fleetSize}
             />
           )}
 
@@ -243,6 +295,9 @@ export default function App() {
           <span className="text-slate-800 font-medium">{toastMessage}</span>
         </div>
       )}
+
+      {/* Realistic Drone Intro Animation & Mission Launch Sequence */}
+      {showIntro && <IntroCinematic onComplete={handleIntroComplete} />}
     </div>
   );
 }

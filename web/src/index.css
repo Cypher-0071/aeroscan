@@ -259,3 +259,126 @@ input[type="range"]::-webkit-slider-thumb:hover {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.3);
 }
+
+/* ==========================================================================
+   Drone Cinematic Intro & Touchdown Animation Suite
+   ========================================================================== */
+
+@keyframes drone-hover {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-7px) rotate(0.8deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(-0.5deg);
+  }
+  75% {
+    transform: translateY(-9px) rotate(-1deg);
+  }
+}
+
+@keyframes board-swing {
+  0%, 100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  30% {
+    transform: rotate(-1.2deg) translateY(2px);
+  }
+  70% {
+    transform: rotate(1deg) translateY(-1px);
+  }
+}
+
+@keyframes rotor-spin-fast {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes strobe-red {
+  0%, 10%, 100% {
+    opacity: 0.15;
+    filter: drop-shadow(0 0 1px #ef4444);
+  }
+  5% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px #ef4444);
+  }
+}
+
+@keyframes strobe-green {
+  0%, 10%, 100% {
+    opacity: 0.15;
+    filter: drop-shadow(0 0 1px #10b981);
+  }
+  5% {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px #10b981);
+  }
+}
+
+@keyframes strobe-white {
+  0%, 8%, 16%, 100% {
+    opacity: 0.1;
+  }
+  4%, 12% {
+    opacity: 1;
+    filter: drop-shadow(0 0 10px #ffffff);
+  }
+}
+
+@keyframes searchlight-cone {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scaleX(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scaleX(1.04);
+  }
+}
+
+@keyframes touchdown-shockwave {
+  0% {
+    transform: scale(0.2);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(3.5);
+    opacity: 0;
+  }
+}
+
+.animate-drone-hover {
+  animation: drone-hover 4s ease-in-out infinite;
+}
+
+.animate-board-swing {
+  animation: board-swing 4s ease-in-out infinite;
+}
+
+.animate-rotor-fast {
+  animation: rotor-spin-fast 0.08s linear infinite;
+}
+
+.animate-strobe-red {
+  animation: strobe-red 1.2s infinite;
+}
+
+.animate-strobe-green {
+  animation: strobe-green 1.2s infinite;
+}
+
+.animate-strobe-white {
+  animation: strobe-white 1.4s infinite;
+}
+
+.animate-searchlight {
+  animation: searchlight-cone 3s ease-in-out infinite;
+}
+

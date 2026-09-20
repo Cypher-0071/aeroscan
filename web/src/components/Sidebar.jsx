@@ -9,7 +9,8 @@ import {
   RefreshCw, 
   Radio, 
   Shield, 
-  Cpu
+  Cpu,
+  Wind
 } from 'lucide-react';
 
 const WORKSPACE_TABS = [
@@ -28,6 +29,25 @@ const SCENARIOS = [
   { id: 'Sample Mountain SAR', label: 'Sample Mountain SAR' },
 ];
 
+const getCardinal = (deg) => {
+  const normalized = ((deg % 360) + 360) % 360;
+  if (normalized >= 337.5 || normalized < 22.5) return 'East (0°)';
+  if (normalized >= 22.5 && normalized < 67.5) return 'NE (45°)';
+  if (normalized >= 67.5 && normalized < 112.5) return 'North (90°)';
+  if (normalized >= 112.5 && normalized < 157.5) return 'NW (135°)';
+  if (normalized >= 157.5 && normalized < 202.5) return 'West (180°)';
+  if (normalized >= 202.5 && normalized < 247.5) return 'SW (225°)';
+  if (normalized >= 247.5 && normalized < 292.5) return 'South (270°)';
+  return 'SE (315°)';
+};
+
+const getWindCategory = (spd) => {
+  if (spd < 2.0) return 'Light Air';
+  if (spd < 6.0) return 'Moderate Breeze';
+  if (spd < 10.0) return 'Strong Wind';
+  return 'High Wind Warning';
+};
+
 export default function Sidebar({
   activeTab,
   setActiveTab,
@@ -45,6 +65,28 @@ export default function Sidebar({
   instance,
   schedule,
 }) {
+  const activeDronesCount = instance?.drones?.length ?? 3;
+  const activeWindSpd = instance?.ambient_wind?.speed_mps ?? 3.5;
+  const activeWindDir = instance?.ambient_wind?.direction_deg ?? 45;
+
+  const isParamsChanged =
+    fleetSize !== activeDronesCount ||
+    Math.abs(windSpeed - activeWindSpd) > 0.1 ||
+    Math.abs(windDir - activeWindDir) > 1;
+
+  const cardinalDir = getCardinal(windDir);
+  const windRating = getWindCategory(windSpeed);
+  const minGroundspeed = Math.max(1.0, 14.5 - windSpeed).toFixed(1);
+  const maxGroundspeed = (14.5 + windSpeed).toFixed(1);
+  const energyImpactPct = ((Math.pow((14.5 + windSpeed * 0.5) / 14.5, 2) - 1) * 100).toFixed(0);
+
+  const fleetCapacityLabel = 
+    fleetSize === 2 
+      ? 'Recon Pair ~40%' 
+      : fleetSize <= 4 
+        ? 'Balanced ~70%' 
+        : 'Full Swarm ~95%';
+
   return (
     <aside className="w-68 border-r border-slate-200/80 bg-white/70 backdrop-blur-2xl flex flex-col justify-between shrink-0 select-none overflow-y-auto h-screen sticky top-0 z-30 transition-colors font-sans">
       <div className="p-4 space-y-5">
@@ -171,12 +213,63 @@ export default function Sidebar({
             />
           </div>
 
+          {/* Dynamic Execution Dependence Impact Card */}
+          <div className="rounded-xl p-3 bg-slate-50/90 border border-slate-200/80 space-y-2 text-xs">
+            <div className="flex items-center justify-between font-medium text-slate-700">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-900">
+                <Wind className="w-3.5 h-3.5 text-sky-600" />
+                <span>Execution Dynamics</span>
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-sky-100 text-sky-800 font-semibold">
+                {cardinalDir} · {windRating}
+              </span>
+            </div>
+
+            <div className="space-y-1 text-[11px] pt-1.5 border-t border-slate-200/70">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Fleet Capacity:</span>
+                <span className="font-mono text-slate-800 font-semibold">
+                  {fleetSize} UAVs ({fleetCapacityLabel})
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Headwind Speed:</span>
+                <span className="font-mono font-semibold text-amber-700">
+                  {minGroundspeed} m/s <span className="text-slate-400 font-normal">(-{windSpeed.toFixed(1)})</span>
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Tailwind Speed:</span>
+                <span className="font-mono font-semibold text-emerald-600">
+                  {maxGroundspeed} m/s <span className="text-slate-400 font-normal">(+{windSpeed.toFixed(1)})</span>
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Upwind Energy Drag:</span>
+                <span className="font-mono font-semibold text-rose-600">
+                  +{energyImpactPct}% Watts
+                </span>
+              </div>
+            </div>
+
+            {isParamsChanged && (
+              <div className="pt-1.5 border-t border-amber-200/70 flex items-center gap-1.5 text-[10px] text-amber-800 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+                <span>Modified • Click Run Optimizer to solve</span>
+              </div>
+            )}
+          </div>
+
           {/* Action Buttons */}
-          <div className="pt-2 grid grid-cols-5 gap-2">
+          <div className="pt-1 grid grid-cols-5 gap-2">
             <button
               onClick={onRunOptimizer}
               disabled={isSolving}
-              className="btn-primary col-span-3 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50"
+              className={`col-span-3 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-medium cursor-pointer disabled:opacity-50 transition-all ${
+                isParamsChanged 
+                  ? 'btn-primary ring-2 ring-sky-500 ring-offset-1 shadow-md' 
+                  : 'btn-primary'
+              }`}
             >
               {isSolving ? (
                 <>
@@ -186,7 +279,7 @@ export default function Sidebar({
               ) : (
                 <>
                   <Play className="w-3.5 h-3.5 fill-current" />
-                  <span>Run Optimizer</span>
+                  <span>{isParamsChanged ? 'Re-solve Swarm' : 'Run Optimizer'}</span>
                 </>
               )}
             </button>

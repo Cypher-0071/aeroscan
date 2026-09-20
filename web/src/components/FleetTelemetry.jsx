@@ -352,27 +352,33 @@ export default function FleetTelemetry({
             <thead>
               <tr className="border-b border-slate-200/80 text-slate-400 text-[11px] font-medium">
                 <th className="py-2.5 px-3">Callsign</th>
-                <th className="py-2.5 px-3">Easting X (m)</th>
-                <th className="py-2.5 px-3">Northing Y (m)</th>
-                <th className="py-2.5 px-3">Altitude Z (m)</th>
+                <th className="py-2.5 px-3">Coordinates (X, Y)</th>
+                <th className="py-2.5 px-3">Alt Z (m)</th>
                 <th className="py-2.5 px-3">Battery SoC</th>
                 <th className="py-2.5 px-3">Groundspeed</th>
-                <th className="py-2.5 px-3">Heading</th>
+                <th className="py-2.5 px-3">Wind Resistance</th>
+                <th className="py-2.5 px-3">Aero Power</th>
                 <th className="py-2.5 px-3">Flight Phase</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200/60 font-mono">
               {telemetryList.map((t) => {
                 const soc = t.battery_percent ?? 100;
+                const gSpeed = (t.ground_speed_mps ?? t.speed_mps ?? 14.5).toFixed(1);
+                const windComp = (t.wind_along_mps ?? 0).toFixed(1);
+                const isTail = (t.wind_along_mps ?? 0) > 0.5;
+                const isHead = (t.wind_along_mps ?? 0) < -0.5;
+
                 return (
                   <tr key={t.drone_id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="py-2.5 px-3 font-semibold text-sky-700">{t.drone_id}</td>
-                    <td className="py-2.5 px-3 text-slate-700">{(t.x ?? 0).toFixed(1)}</td>
-                    <td className="py-2.5 px-3 text-slate-700">{(t.y ?? 0).toFixed(1)}</td>
-                    <td className="py-2.5 px-3 text-slate-700">{(t.z ?? 60).toFixed(1)}</td>
+                    <td className="py-2.5 px-3 text-slate-700">
+                      ({(t.x ?? 0).toFixed(0)}, {(t.y ?? 0).toFixed(0)})
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-700">{(t.z ?? 60).toFixed(0)}</td>
                     <td className="py-2.5 px-3">
                       <div className="flex items-center gap-2">
-                        <div className="w-16 bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
+                        <div className="w-14 bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
                           <div
                             className={`h-full rounded-full ${soc >= 15 ? 'bg-emerald-500' : 'bg-rose-500'}`}
                             style={{ width: `${Math.max(0, Math.min(100, soc))}%` }}
@@ -383,8 +389,21 @@ export default function FleetTelemetry({
                         </span>
                       </div>
                     </td>
-                    <td className="py-2.5 px-3 text-slate-700">{(t.speed_mps ?? 14.5).toFixed(1)} m/s</td>
-                    <td className="py-2.5 px-3 text-slate-700">{(t.heading_deg ?? 0).toFixed(0)}°</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-900">{gSpeed} m/s</td>
+                    <td className="py-2.5 px-3">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-sans font-medium border ${
+                        isTail 
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' 
+                          : isHead 
+                            ? 'bg-amber-50 text-amber-700 border-amber-200/80' 
+                            : 'bg-slate-50 text-slate-600 border-slate-200/70'
+                      }`}>
+                        {t.wind_effect ?? 'Nominal'} ({windComp >= 0 ? '+' : ''}{windComp} m/s)
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-amber-700 font-semibold">
+                      {(t.power_watts ?? 180).toFixed(0)} W
+                    </td>
                     <td className="py-2.5 px-3 font-sans">
                       <span className="px-2.5 py-0.5 rounded-md text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200/80">
                         {t.flight_phase ?? 'CRUISE'}
