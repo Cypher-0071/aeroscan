@@ -257,7 +257,7 @@ export default function OperationsMap({
   const [showTacticalGrid, setShowTacticalGrid] = useState(true);
   const [showWindStream, setShowWindStream] = useState(true);
   const [showUavIcons, setShowUavIcons] = useState(true);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [playbackSpeed, setPlaybackSpeed] = useState(20); // 20 mission-sec per wall-sec feels natural for an 800s mission
   const [selectedInspectorObj, setSelectedInspectorObj] = useState('None (Overview)');
   const [hoveredTarget, setHoveredTarget] = useState(null);
 
@@ -1171,7 +1171,7 @@ export default function OperationsMap({
           {/* Speed Selector */}
           <div className="flex items-center gap-2">
             <div className="segmented-control">
-              {[1, 2, 5, 10].map((spd) => (
+              {[5, 10, 20, 50].map((spd) => (
                 <button
                   key={spd}
                   onClick={() => setPlaybackSpeed(spd)}
@@ -1179,7 +1179,7 @@ export default function OperationsMap({
                     playbackSpeed === spd ? 'segmented-item-active' : ''
                   }`}
                 >
-                  {spd}x
+                  {spd}×
                 </button>
               ))}
             </div>
