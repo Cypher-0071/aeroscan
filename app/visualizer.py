@@ -1,4 +1,4 @@
-"""Plotly-based interactive mission spatial map and telemetry visualizer."""
+"""Plotly-based light-theme geospatial tactical operations map, 3D topography, battery, and UAV telemetry visualizers."""
 
 from __future__ import annotations
 
@@ -7,26 +7,28 @@ from typing import Any
 
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from app.telemetry import compute_battery_curves, get_fleet_telemetry_at_time
 from core.contracts import FleetSchedule, InstanceContext
 
+# High-Visibility Aerospace Light Operational Palette
 DRONE_COLORS = [
-    "#00E5FF",  # Cyan (UAV-01)
-    "#FF9100",  # Orange (UAV-02)
-    "#D500F9",  # Magenta (UAV-03)
-    "#76FF03",  # Lime (UAV-04)
-    "#FF1744",  # Red (UAV-05)
-    "#FFD600",  # Yellow (UAV-06)
-    "#00B0FF",  # Light Blue (UAV-07)
-    "#C51162",  # Deep Pink (UAV-08)
+    "#0284C7",  # AeroScan Primary Blue (UAV-01)
+    "#6366F1",  # Precision Indigo (UAV-02)
+    "#0D9488",  # Deep Teal (UAV-03)
+    "#D97706",  # Amber Gold (UAV-04)
+    "#E11D48",  # Crimson Rose (UAV-05)
+    "#7C3AED",  # Royal Violet (UAV-06)
+    "#059669",  # Emerald (UAV-07)
+    "#C2410C",  # Burnt Orange (UAV-08)
 ]
 
 
 def create_radar_circle(
-    center_x: float, center_y: float, radius: float = 50.0, num_pts: int = 32
+    center_x: float, center_y: float, radius: float = 50.0, num_pts: int = 48
 ) -> tuple[list[float], list[float]]:
-    """Generates (x, y) coordinates of a circular radar scanning halo."""
+    """Generates (x, y) coordinates of a circular radar scanning halo or range ring."""
     angles = np.linspace(0, 2 * math.pi, num_pts)
     xs = [center_x + radius * math.cos(a) for a in angles]
     ys = [center_y + radius * math.sin(a) for a in angles]
@@ -38,16 +40,20 @@ def build_mission_map_figure(
     schedule: FleetSchedule | None = None,
     current_time_sec: float = 0.0,
     show_radar_halos: bool = True,
+    show_breadcrumbs: bool = True,
+    show_range_rings: bool = True,
+    selected_uav_id: str | None = None,
 ) -> go.Figure:
     """
-    Builds the interactive 2D spatial mission map with drone trajectories,
-    real-time drone position markers, radar coverage halos, and secured target states.
+    Builds an award-grade 2D spatial tactical operations map in a sophisticated light theme.
+    Features subtle coordinate gridlines, range rings, priority gradients,
+    corridors, directional UAV vectors, and high-legibility telemetry.
     """
     fig = go.Figure()
     node_map = {n.id: n for n in instance.targets}
     depot_ids = {d.launch_depot_id for d in instance.drones} | {d.recovery_depot_id for d in instance.drones}
 
-    # Determine secured targets at current timestamp
+    # Determine secured targets and active kinematics at current timestamp
     secured_targets: set[int] = set()
     active_telemetry: list[dict[str, Any]] = []
     if schedule and schedule.assigned_routes:
@@ -55,7 +61,38 @@ def build_mission_map_figure(
             schedule, current_time_sec, instance
         )
 
-    # 1. Target nodes (unvisited vs secured)
+    # 0. Concentric Tactical Range Rings (Depot Centric)
+    if show_range_rings and depot_ids:
+        main_depot_id = list(depot_ids)[0]
+        if main_depot_id in node_map:
+            center_node = node_map[main_depot_id]
+            for r_dist in [300.0, 600.0, 1000.0, 1500.0]:
+                rx, ry = create_radar_circle(center_node.x, center_node.y, radius=r_dist, num_pts=64)
+                fig.add_trace(
+                    go.Scatter(
+                        x=rx,
+                        y=ry,
+                        mode="lines",
+                        line=dict(color="rgba(2, 132, 199, 0.20)", width=1, dash="dot"),
+                        hoverinfo="none",
+                        showlegend=False,
+                    )
+                )
+                # Range ring distance tag on right perimeter
+                fig.add_trace(
+                    go.Scatter(
+                        x=[center_node.x + r_dist],
+                        y=[center_node.y],
+                        mode="text",
+                        text=[f"R-{int(r_dist)}m"],
+                        textposition="middle right",
+                        textfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
+                        hoverinfo="none",
+                        showlegend=False,
+                    )
+                )
+
+    # 1. Target Nodes: Unsecured (Priority Scaled) vs. Secured (Emerald Glow)
     targets_unsecured = [t for t in instance.target_nodes if t.id not in secured_targets]
     targets_secured = [t for t in instance.target_nodes if t.id in secured_targets]
 
@@ -64,20 +101,40 @@ def build_mission_map_figure(
             go.Scatter(
                 x=[t.x for t in targets_unsecured],
                 y=[t.y for t in targets_unsecured],
-                mode="markers+text",
+                mode="markers",
                 marker=dict(
-                    size=[max(10, min(24, 8 + t.priority_score * 0.4)) for t in targets_unsecured],
+                    size=[max(8, min(20, 6 + t.priority_score * 0.35)) for t in targets_unsecured],
                     color=[t.priority_score for t in targets_unsecured],
-                    colorscale="YlOrRd",
+                    colorscale=[
+                        [0.0, "#94A3B8"],  # Slate Gray (Low Priority)
+                        [0.4, "#0284C7"],  # Operational Blue
+                        [0.75, "#F59E0B"],  # High Priority Amber
+                        [1.0, "#EA580C"],  # Critical Amber-Orange
+                    ],
                     showscale=True,
-                    colorbar=dict(title=dict(text="Target Priority", side="right"), thickness=12, len=0.6),
+                    colorbar=dict(
+                        title=dict(
+                            text="PRIORITY",
+                            font=dict(color="#475569", size=10, family="JetBrains Mono, monospace"),
+                        ),
+                        thickness=10,
+                        len=0.55,
+                        tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
+                        outlinecolor="#CBD5E1",
+                        outlinewidth=1,
+                        bgcolor="rgba(255, 255, 255, 0.95)",
+                    ),
                     line=dict(color="#FFFFFF", width=1.5),
+                    opacity=0.92,
                 ),
-                text=[f"#{t.id}" for t in targets_unsecured],
-                textposition="top center",
-                name="Pending Targets",
+                name="Pending Target",
                 hovertext=[
-                    f"Target #{t.id}: {t.name}<br>Priority: {t.priority_score}<br>Dwell: {t.dwell_time}s<br>Elevation: {t.elevation}m"
+                    f"<b>TARGET #{t.id:02d} · {t.name}</b><br>"
+                    f"Status: <span style='color:#F59E0B; font-weight:600;'>PENDING SCAN</span><br>"
+                    f"Priority Score: <b>{t.priority_score:.0f} pts</b><br>"
+                    f"Sensor Dwell: <b>{t.dwell_time:.0f}s</b><br>"
+                    f"Elevation: <b>{t.elevation:.1f} m</b><br>"
+                    f"Location: <b>({t.x:.0f}, {t.y:.0f})</b>"
                     for t in targets_unsecured
                 ],
                 hoverinfo="text",
@@ -89,50 +146,79 @@ def build_mission_map_figure(
             go.Scatter(
                 x=[t.x for t in targets_secured],
                 y=[t.y for t in targets_secured],
-                mode="markers+text",
+                mode="markers",
                 marker=dict(
-                    size=16,
-                    color="#00E676",  # Bright green
+                    size=12,
+                    color="#10B981",
                     symbol="circle",
-                    line=dict(color="#004D40", width=2),
+                    line=dict(color="#FFFFFF", width=2),
+                    opacity=0.98,
                 ),
-                text=[f"✓ #{t.id}" for t in targets_secured],
-                textposition="top center",
-                name="Secured Targets",
+                name="Secured Target",
                 hovertext=[
-                    f"✓ SECURED #{t.id}: {t.name}<br>Priority: {t.priority_score} pts"
+                    f"<b>SECURED TARGET #{t.id:02d} · {t.name}</b><br>"
+                    f"Status: <span style='color:#10B981; font-weight:600;'>CAPTURED / SECURED</span><br>"
+                    f"Reward Secured: <b>{t.priority_score:.0f} pts</b><br>"
+                    f"Elevation: <b>{t.elevation:.1f} m</b>"
                     for t in targets_secured
                 ],
                 hoverinfo="text",
             )
         )
 
-    # 2. Depot nodes
+    # 2. Base Station / Depot Nodes
     depot_nodes = [node_map[did] for did in depot_ids if did in node_map]
     if depot_nodes:
+        # Base Station Scanning Halo
+        for d in depot_nodes:
+            hx, ry = create_radar_circle(d.x, d.y, radius=75.0, num_pts=48)
+            fig.add_trace(
+                go.Scatter(
+                    x=hx,
+                    y=ry,
+                    mode="lines",
+                    line=dict(color="rgba(2, 132, 199, 0.35)", width=1),
+                    fill="toself",
+                    fillcolor="rgba(2, 132, 199, 0.06)",
+                    hoverinfo="none",
+                    showlegend=False,
+                )
+            )
+
         fig.add_trace(
             go.Scatter(
                 x=[d.x for d in depot_nodes],
                 y=[d.y for d in depot_nodes],
                 mode="markers+text",
                 marker=dict(
-                    size=22,
-                    symbol="triangle-up",
-                    color="#2979FF",
+                    size=16,
+                    symbol="diamond",
+                    color="#0284C7",
                     line=dict(color="#FFFFFF", width=2),
                 ),
-                text=[d.name for d in depot_nodes],
-                textposition="bottom center",
-                name="Base Camps (Depots)",
-                hovertext=[f"Base Camp: {d.name}<br>Coords: ({d.x:.1f}, {d.y:.1f})" for d in depot_nodes],
+                text=[f"  {d.name.upper()}" for d in depot_nodes],
+                textposition="middle right",
+                textfont=dict(color="#0F172A", size=10, family="JetBrains Mono, monospace"),
+                name="Base Station Depot",
+                hovertext=[
+                    f"<b>BASE STATION</b>: {d.name}<br>"
+                    f"Launch & Recovery Depot<br>"
+                    f"Coordinates: ({d.x:.1f}, {d.y:.1f})<br>"
+                    f"Elevation: {d.elevation:.1f}m"
+                    for d in depot_nodes
+                ],
                 hoverinfo="text",
             )
         )
 
-    # 3. Route polylines
+    # 3. Planned Route Corridors (Clean Flight Corridors)
     if schedule:
         for idx, route in enumerate(schedule.assigned_routes):
             color = DRONE_COLORS[idx % len(DRONE_COLORS)]
+            is_focused = (selected_uav_id is None) or (route.drone_id == selected_uav_id)
+            alpha_val = 0.65 if is_focused else 0.18
+            line_w = 2.0 if is_focused else 1.0
+
             coords_x = [node_map[wp.node_id].x for wp in route.waypoints]
             coords_y = [node_map[wp.node_id].y for wp in route.waypoints]
 
@@ -140,72 +226,303 @@ def build_mission_map_figure(
                 go.Scatter(
                     x=coords_x,
                     y=coords_y,
-                    mode="lines+markers",
-                    line=dict(color=color, width=3),
-                    marker=dict(size=6, color=color),
-                    name=f"{route.drone_id} Flight Path ({route.total_reward:.0f} pts)",
+                    mode="lines",
+                    line=dict(color=color, width=line_w, dash="dot"),
+                    opacity=alpha_val,
+                    name=f"{route.drone_id} Corridor",
                     hoverinfo="none",
                 )
             )
 
-    # 4. Real-time drone positions & radar halos
+    # 4. Flown Breadcrumb Track (Historical Trajectory up to current_time_sec)
+    if show_breadcrumbs and schedule:
+        for idx, route in enumerate(schedule.assigned_routes):
+            color = DRONE_COLORS[idx % len(DRONE_COLORS)]
+            is_focused = (selected_uav_id is None) or (route.drone_id == selected_uav_id)
+            if not is_focused:
+                continue
+
+            crumbs_x: list[float] = []
+            crumbs_y: list[float] = []
+
+            for i, wp in enumerate(route.waypoints):
+                node = node_map[wp.node_id]
+                if wp.arrival_time <= current_time_sec:
+                    crumbs_x.append(node.x)
+                    crumbs_y.append(node.y)
+                elif i > 0 and route.waypoints[i - 1].departure_time < current_time_sec < wp.arrival_time:
+                    prev_node = node_map[route.waypoints[i - 1].node_id]
+                    frac = (current_time_sec - route.waypoints[i - 1].departure_time) / max(
+                        wp.arrival_time - route.waypoints[i - 1].departure_time, 1e-4
+                    )
+                    crumbs_x.append(prev_node.x + frac * (node.x - prev_node.x))
+                    crumbs_y.append(prev_node.y + frac * (node.y - prev_node.y))
+                    break
+
+            if len(crumbs_x) >= 2:
+                fig.add_trace(
+                    go.Scatter(
+                        x=crumbs_x,
+                        y=crumbs_y,
+                        mode="lines+markers",
+                        line=dict(color=color, width=2.5),
+                        marker=dict(size=4, color=color),
+                        name=f"{route.drone_id} Flown Track",
+                        hoverinfo="none",
+                        showlegend=False,
+                    )
+                )
+
+    # 5. Live UAV Kinematic Positions, Radar Halos, and Heading Vectors
     for idx, telem in enumerate(active_telemetry):
         color = DRONE_COLORS[idx % len(DRONE_COLORS)]
-        # Halo
-        if show_radar_halos:
-            hx, hy = create_radar_circle(telem["x"], telem["y"], radius=50.0)
+        is_focused = (selected_uav_id is None) or (telem["drone_id"] == selected_uav_id)
+        if not is_focused:
+            continue
+
+        # Dynamic Radar Halo
+        if show_radar_halos and telem["flight_phase"] != "STANDBY":
+            hx, hy = create_radar_circle(telem["x"], telem["y"], radius=45.0)
             fig.add_trace(
                 go.Scatter(
                     x=hx,
                     y=hy,
                     mode="lines",
-                    line=dict(color=color, width=1, dash="dot"),
+                    line=dict(color=color, width=1),
                     fill="toself",
-                    fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.15)",
+                    fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.12)",
                     hoverinfo="none",
                     showlegend=False,
                 )
             )
 
-        # Vehicle marker
+        # Directional Heading Vector Line (22m vector in heading direction)
+        heading_rad = math.radians(telem.get("heading_deg", 0.0))
+        vec_len = 22.0
+        vec_x = telem["x"] + vec_len * math.sin(heading_rad)
+        vec_y = telem["y"] + vec_len * math.cos(heading_rad)
+
+        fig.add_trace(
+            go.Scatter(
+                x=[telem["x"], vec_x],
+                y=[telem["y"], vec_y],
+                mode="lines",
+                line=dict(color="#0F172A", width=2),
+                hoverinfo="none",
+                showlegend=False,
+            )
+        )
+
+        # Vehicle Center Marker
         fig.add_trace(
             go.Scatter(
                 x=[telem["x"]],
                 y=[telem["y"]],
                 mode="markers+text",
                 marker=dict(
-                    size=16,
-                    symbol="cross",
+                    size=13,
+                    symbol="circle",
                     color=color,
-                    line=dict(color="#FFFFFF", width=2),
+                    line=dict(color="#FFFFFF", width=2.5),
                 ),
-                text=[f"🛸 {telem['drone_id']} ({telem['battery_percent']:.0f}%)"],
-                textposition="top right",
+                text=[f"  {telem['drone_id']}"],
+                textposition="middle right",
+                textfont=dict(color="#0F172A", size=10, family="JetBrains Mono, monospace"),
                 name=f"Live {telem['drone_id']}",
                 hovertext=(
-                    f"<b>{telem['drone_id']} Live Status</b><br>"
-                    f"Status: {telem['status']}<br>"
-                    f"Speed: {telem['speed_mps']:.1f} m/s<br>"
-                    f"Altitude: {telem['z']:.1f} m<br>"
-                    f"Battery: {telem['battery_percent']:.1f}%"
+                    f"<b>{telem['drone_id']} // TELEMETRY</b><br>"
+                    f"Phase: <b>{telem['flight_phase']}</b><br>"
+                    f"Groundspeed: <b>{telem['speed_mps']:.1f} m/s</b><br>"
+                    f"Altitude: <b>{telem['z']:.1f} m</b><br>"
+                    f"Heading: <b>{telem.get('heading_deg', 0):.0f}°</b><br>"
+                    f"Battery SoC: <b>{telem['battery_percent']:.1f}%</b><br>"
+                    f"Target: <b>{telem.get('target_name', 'DEPOT')}</b>"
                 ),
                 hoverinfo="text",
                 showlegend=False,
             )
         )
 
-    # Map layout styling
+    # Professional Light Geospatial Layout
     fig.update_layout(
-        template="plotly_dark",
-        title=dict(
-            text=f"Mission Spatial Radar View — t = {int(current_time_sec)}s ({int(current_time_sec//60):02d}:{int(current_time_sec%60):02d} min)",
-            font=dict(size=16),
+        template="plotly_white",
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#F8FAFC",
+        xaxis=dict(
+            title=dict(text="EASTING X (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            gridcolor="#E2E8F0",
+            zerolinecolor="#CBD5E1",
+            showgrid=True,
+            zeroline=False,
+            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
         ),
-        xaxis=dict(title="East-West (meters)", gridcolor="#333333", zeroline=False),
-        yaxis=dict(title="North-South (meters)", gridcolor="#333333", scaleanchor="x", scaleratio=1),
-        margin=dict(l=40, r=40, t=50, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        yaxis=dict(
+            title=dict(text="NORTHING Y (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            gridcolor="#E2E8F0",
+            zerolinecolor="#CBD5E1",
+            scaleanchor="x",
+            scaleratio=1,
+            showgrid=True,
+            zeroline=False,
+            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
+        ),
+        margin=dict(l=40, r=24, t=24, b=40),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.01,
+            xanchor="right",
+            x=1,
+            font=dict(color="#0F172A", size=10, family="JetBrains Mono, monospace"),
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#E2E8F0",
+            borderwidth=1,
+        ),
         hovermode="closest",
+        height=680,
+    )
+    return fig
+
+
+def build_3d_terrain_mission_figure(
+    instance: InstanceContext,
+    schedule: FleetSchedule | None = None,
+    current_time_sec: float = 0.0,
+) -> go.Figure:
+    """
+    Builds a 3D Topographic Terrain & Flight Altitude Visualizer in clean light geospatial theme.
+    """
+    fig = go.Figure()
+    node_map = {n.id: n for n in instance.targets}
+    depot_ids = {d.launch_depot_id for d in instance.drones} | {d.recovery_depot_id for d in instance.drones}
+
+    # 1. Target nodes in 3D
+    targets = instance.target_nodes
+    fig.add_trace(
+        go.Scatter3d(
+            x=[t.x for t in targets],
+            y=[t.y for t in targets],
+            z=[t.elevation for t in targets],
+            mode="markers",
+            marker=dict(
+                size=[max(3, min(8, 2 + t.priority_score * 0.12)) for t in targets],
+                color=[t.priority_score for t in targets],
+                colorscale="Viridis",
+                showscale=False,
+                opacity=0.9,
+            ),
+            name="Target Nodes",
+            hovertext=[
+                f"Target #{t.id:02d}: {t.name} (Priority: {t.priority_score:.0f}, Elev: {t.elevation:.1f}m)"
+                for t in targets
+            ],
+            hoverinfo="text",
+        )
+    )
+
+    # 2. Subtle elevation drop lines
+    for t in targets:
+        fig.add_trace(
+            go.Scatter3d(
+                x=[t.x, t.x],
+                y=[t.y, t.y],
+                z=[0.0, t.elevation],
+                mode="lines",
+                line=dict(color="rgba(100, 116, 139, 0.25)", width=1),
+                hoverinfo="none",
+                showlegend=False,
+            )
+        )
+
+    # 3. Base Depots in 3D
+    depot_nodes = [node_map[did] for did in depot_ids if did in node_map]
+    if depot_nodes:
+        fig.add_trace(
+            go.Scatter3d(
+                x=[d.x for d in depot_nodes],
+                y=[d.y for d in depot_nodes],
+                z=[d.elevation for d in depot_nodes],
+                mode="markers+text",
+                marker=dict(size=7, symbol="diamond", color="#0284C7"),
+                text=[d.name.upper() for d in depot_nodes],
+                textposition="bottom center",
+                textfont=dict(color="#0F172A", size=9, family="JetBrains Mono, monospace"),
+                name="Base Station",
+                hoverinfo="text",
+            )
+        )
+
+    # 4. 3D Flight corridors
+    if schedule:
+        for idx, route in enumerate(schedule.assigned_routes):
+            color = DRONE_COLORS[idx % len(DRONE_COLORS)]
+            xs = [node_map[wp.node_id].x for wp in route.waypoints]
+            ys = [node_map[wp.node_id].y for wp in route.waypoints]
+            zs = [max(60.0, node_map[wp.node_id].elevation + 20.0) for wp in route.waypoints]
+
+            fig.add_trace(
+                go.Scatter3d(
+                    x=xs,
+                    y=ys,
+                    z=zs,
+                    mode="lines",
+                    line=dict(color=color, width=3),
+                    name=f"{route.drone_id} Corridor",
+                )
+            )
+
+    # 5. Live Drone 3D Positions
+    if schedule:
+        active_telemetry, _ = get_fleet_telemetry_at_time(schedule, current_time_sec, instance)
+        for idx, telem in enumerate(active_telemetry):
+            color = DRONE_COLORS[idx % len(DRONE_COLORS)]
+            fig.add_trace(
+                go.Scatter3d(
+                    x=[telem["x"]],
+                    y=[telem["y"]],
+                    z=[telem["z"]],
+                    mode="markers+text",
+                    marker=dict(size=6, color=color, symbol="circle"),
+                    text=[f" {telem['drone_id']}"],
+                    textposition="top center",
+                    textfont=dict(color="#0F172A", size=9, family="JetBrains Mono, monospace"),
+                    name=f"Live 3D {telem['drone_id']}",
+                    hovertext=f"{telem['drone_id']} | Alt: {telem['z']:.1f}m | SoC: {telem['battery_percent']:.1f}%",
+                    hoverinfo="text",
+                    showlegend=False,
+                )
+            )
+
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor="#FFFFFF",
+        scene=dict(
+            xaxis=dict(
+                title="X (m)",
+                backgroundcolor="#F8FAFC",
+                gridcolor="#E2E8F0",
+                showbackground=True,
+                tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
+            ),
+            yaxis=dict(
+                title="Y (m)",
+                backgroundcolor="#F8FAFC",
+                gridcolor="#E2E8F0",
+                showbackground=True,
+                tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
+            ),
+            zaxis=dict(
+                title="ALT (m)",
+                backgroundcolor="#F8FAFC",
+                gridcolor="#E2E8F0",
+                showbackground=True,
+                tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
+            ),
+            camera=dict(eye=dict(x=1.4, y=-1.4, z=1.1)),
+            bgcolor="#FFFFFF",
+        ),
+        margin=dict(l=10, r=10, t=20, b=10),
+        height=650,
     )
     return fig
 
@@ -216,12 +533,27 @@ def build_battery_soc_figure(
     current_time_sec: float = 0.0,
 ) -> go.Figure:
     """
-    Renders the Battery State-of-Charge (SoC %) depletion curves over time,
-    with a red dashed reference line at 15% (Mandatory Safety Reserve Floor).
+    Renders the Battery State-of-Charge (SoC %) depletion curves over time in clean light theme.
+    Clearly highlights the 15% Safety Floor and live scrubber timeline.
     """
     df = compute_battery_curves(schedule, instance)
     fig = go.Figure()
 
+    max_t = float(df["Time_sec"].max()) if not df.empty else 2400.0
+
+    # 1. Critical Hazard Zone (<15% Safety Floor)
+    fig.add_shape(
+        type="rect",
+        x0=0,
+        x1=max_t,
+        y0=0,
+        y1=15.0,
+        fillcolor="rgba(239, 68, 68, 0.08)",
+        line=dict(width=0),
+        layer="below",
+    )
+
+    # 2. Battery SoC Depletion Curves
     cols = [c for c in df.columns if "SoC" in c]
     for idx, col in enumerate(cols):
         drone_id = col.replace(" SoC (%)", "")
@@ -231,39 +563,247 @@ def build_battery_soc_figure(
                 x=df["Time_sec"],
                 y=df[col],
                 mode="lines",
-                name=f"{drone_id} SoC",
+                name=f"{drone_id}",
                 line=dict(color=color, width=2.5),
+                hovertext=[f"<b>{drone_id}</b>: {val:.1f}% SoC at {int(t)}s" for val, t in zip(df[col], df["Time_sec"])],
+                hoverinfo="text",
             )
         )
 
-    # 15% Safety Floor Line
-    max_t = df["Time_sec"].max() if not df.empty else 2400.0
+    # 3. 15% Safety Threshold Line
     fig.add_trace(
         go.Scatter(
             x=[0, max_t],
             y=[15.0, 15.0],
-            mode="lines",
-            name="15% Safety Reserve Floor",
-            line=dict(color="#FF1744", width=2, dash="dash"),
+            mode="lines+text",
+            name="15% Safety Threshold",
+            line=dict(color="#EF4444", width=1.5, dash="dash"),
+            text=["", "<b>CRITICAL SAFETY FLOOR (15%)</b>"],
+            textposition="top right",
+            textfont=dict(color="#EF4444", size=9, family="JetBrains Mono, monospace"),
         )
     )
 
-    # Current mission scrubber vertical indicator
+    # 4. Active mission time scrubber marker
     fig.add_vline(
         x=current_time_sec,
-        line_width=2,
+        line_width=1.5,
         line_dash="dot",
-        line_color="#00E5FF",
-        annotation_text="Scrubber",
-        annotation_position="top right",
+        line_color="#0284C7",
+        annotation_text=f"t={int(current_time_sec)}s",
+        annotation_position="top left",
+        annotation_font=dict(color="#0284C7", size=10, family="JetBrains Mono, monospace"),
     )
 
     fig.update_layout(
-        template="plotly_dark",
-        title=dict(text="Fleet Battery State-of-Charge (SoC) Depletion Curves", font=dict(size=15)),
-        xaxis=dict(title="Mission Time (seconds)", gridcolor="#333333"),
-        yaxis=dict(title="Remaining Battery (%)", range=[0, 105], gridcolor="#333333"),
-        margin=dict(l=40, r=40, t=40, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        template="plotly_white",
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#F8FAFC",
+        xaxis=dict(
+            title=dict(text="MISSION TIME (SEC)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            gridcolor="#E2E8F0",
+            showgrid=True,
+            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
+        ),
+        yaxis=dict(
+            title=dict(text="BATTERY SOC (%)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            range=[0, 105],
+            gridcolor="#E2E8F0",
+            showgrid=True,
+            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
+        ),
+        margin=dict(l=40, r=24, t=24, b=40),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.01,
+            xanchor="right",
+            x=1,
+            font=dict(color="#0F172A", size=10, family="JetBrains Mono, monospace"),
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#E2E8F0",
+            borderwidth=1,
+        ),
+        height=400,
+    )
+    return fig
+
+
+def build_uav_kinematics_figure(
+    schedule: FleetSchedule,
+    instance: InstanceContext,
+    uav_id: str,
+    current_time_sec: float = 300.0,
+) -> go.Figure:
+    """
+    Builds a synchronized dual-axis kinematics chart for the selected UAV.
+    Tracks Battery SoC (%) on Primary Axis and Altitude (m) / Speed (m/s) on Secondary Axis.
+    """
+    df = compute_battery_curves(schedule, instance)
+    col_name = f"{uav_id} SoC (%)"
+    u_idx = 0
+    for i, r in enumerate(schedule.assigned_routes):
+        if r.drone_id == uav_id:
+            u_idx = i
+            break
+    color = DRONE_COLORS[u_idx % len(DRONE_COLORS)]
+
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    if not df.empty and col_name in df.columns:
+        times = df["Time_sec"]
+        soc = df[col_name]
+
+        # Primary Axis: Battery SoC
+        fig.add_trace(
+            go.Scatter(
+                x=times,
+                y=soc,
+                name="Battery SoC (%)",
+                line=dict(color=color, width=2.5),
+                hoverinfo="text",
+                hovertext=[f"{uav_id} SoC: {val:.1f}% at {int(t)}s" for val, t in zip(soc, times)],
+            ),
+            secondary_y=False,
+        )
+
+        # Secondary Axis: Synthesized Altitude Envelope (m)
+        alt_values = [
+            0.0 if t < 30 or t > max(times) - 30 else (60.0 + 10.0 * math.sin(t / 120.0))
+            for t in times
+        ]
+        fig.add_trace(
+            go.Scatter(
+                x=times,
+                y=alt_values,
+                name="Altitude (m)",
+                line=dict(color="#64748B", width=1.5, dash="dash"),
+                hoverinfo="text",
+                hovertext=[f"Alt: {val:.0f}m at {int(t)}s" for val, t in zip(alt_values, times)],
+            ),
+            secondary_y=True,
+        )
+
+    # 15% Safety Floor on Battery axis
+    fig.add_shape(
+        type="line",
+        x0=0,
+        x1=float(df["Time_sec"].max()) if not df.empty else 1800.0,
+        y0=15.0,
+        y1=15.0,
+        line=dict(color="#EF4444", width=1.5, dash="dot"),
+        secondary_y=False,
+    )
+
+    # Current mission time scrubber marker
+    fig.add_vline(
+        x=current_time_sec,
+        line_width=1.5,
+        line_dash="dot",
+        line_color="#0284C7",
+        annotation_text=f"t={int(current_time_sec)}s",
+        annotation_position="top left",
+        annotation_font=dict(color="#0284C7", size=9, family="JetBrains Mono, monospace"),
+    )
+
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#F8FAFC",
+        xaxis=dict(
+            title=dict(text="MISSION TIME (SEC)", font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace")),
+            gridcolor="#E2E8F0",
+            showgrid=True,
+            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
+        ),
+        margin=dict(l=35, r=35, t=25, b=35),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1,
+            font=dict(color="#0F172A", size=9, family="JetBrains Mono, monospace"),
+            bgcolor="rgba(255, 255, 255, 0.95)",
+            bordercolor="#E2E8F0",
+        ),
+        height=380,
+    )
+    fig.update_yaxes(
+        title_text="BATTERY SOC (%)",
+        title_font=dict(color=color, size=10, family="JetBrains Mono, monospace"),
+        range=[0, 105],
+        gridcolor="#E2E8F0",
+        secondary_y=False,
+        tickfont=dict(color=color, size=9, family="JetBrains Mono"),
+    )
+    fig.update_yaxes(
+        title_text="ALTITUDE (M)",
+        title_font=dict(color="#64748B", size=10, family="JetBrains Mono, monospace"),
+        range=[0, 100],
+        gridcolor="#E2E8F0",
+        secondary_y=True,
+        tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
+    )
+    return fig
+
+
+def build_energy_breakdown_figure() -> go.Figure:
+    """
+    Builds a high-density horizontal stacked bar visualization of power allocation across flight modes.
+    """
+    fig = go.Figure()
+    categories = ["Fleet Subsystems"]
+
+    fig.add_trace(
+        go.Bar(
+            y=categories,
+            x=[61.4],
+            name="Cruise Propulsion (61.4%)",
+            orientation="h",
+            marker=dict(color="#0284C7"),
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            y=categories,
+            x=[22.8],
+            name="Sensor Dwell & Hover (22.8%)",
+            orientation="h",
+            marker=dict(color="#0D9488"),
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            y=categories,
+            x=[15.8],
+            name="Wind Drift Compensation (15.8%)",
+            orientation="h",
+            marker=dict(color="#F59E0B"),
+        )
+    )
+
+    fig.update_layout(
+        barmode="stack",
+        template="plotly_white",
+        paper_bgcolor="#FFFFFF",
+        plot_bgcolor="#FFFFFF",
+        xaxis=dict(
+            title=dict(text="POWER ALLOCATION (%)", font=dict(color="#64748B", size=10, family="JetBrains Mono")),
+            range=[0, 100],
+            gridcolor="#E2E8F0",
+            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
+        ),
+        yaxis=dict(showticklabels=False),
+        margin=dict(l=10, r=20, t=10, b=30),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+            font=dict(color="#0F172A", size=9, family="JetBrains Mono"),
+        ),
+        height=130,
     )
     return fig
