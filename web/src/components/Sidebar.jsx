@@ -45,14 +45,6 @@ export default function Sidebar({
   instance,
   schedule,
 }) {
-  const totalTargets = instance?.target_nodes?.length ?? 0;
-  const visitedTargets = (schedule?.assigned_routes ?? []).reduce(
-    (acc, r) => acc + (r.target_ids?.length ?? 0), 
-    0
-  );
-  const coveragePct = totalTargets > 0 ? (visitedTargets / totalTargets) * 100 : 0;
-  const activeDronesCount = instance?.drones?.length ?? fleetSize;
-
   return (
     <aside className="w-68 border-r border-slate-200/80 bg-white/70 backdrop-blur-2xl flex flex-col justify-between shrink-0 select-none overflow-y-auto h-screen sticky top-0 z-30 transition-colors font-sans">
       <div className="p-4 space-y-5">
@@ -106,37 +98,10 @@ export default function Sidebar({
           </nav>
         </div>
 
-        {/* Active Mission Context Card */}
-        <div className="glass-card rounded-xl p-3.5 space-y-3">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-slate-900 truncate max-w-[140px]">
-              {instance?.instance_name ?? 'Active Scenario'}
-            </span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-medium">
-              Live
-            </span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 text-center">
-            <div>
-              <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Fleet</div>
-              <div className="text-xs font-semibold text-slate-800 font-mono mt-0.5">{activeDronesCount} UAVs</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Targets</div>
-              <div className="text-xs font-semibold text-slate-800 font-mono mt-0.5">{totalTargets}</div>
-            </div>
-            <div>
-              <div className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">Coverage</div>
-              <div className="text-xs font-semibold text-sky-600 font-mono mt-0.5">{coveragePct.toFixed(0)}%</div>
-            </div>
-          </div>
-        </div>
-
         {/* Mission Setup Controls */}
-        <div className="space-y-3.5 pt-1">
+        <div className="space-y-4 pt-2">
           <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider px-1">
-            Parameters
+            Mission Parameters
           </div>
 
           {/* Scenario Selector */}
