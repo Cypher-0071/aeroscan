@@ -1,0 +1,16 @@
+{
+  "name": "aeroscan",
+  "version": "1.0.0",
+  "description": "AeroScan-Optima — Matheuristic Multi-Drone Mission Operations Platform (React + Python)",
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix web",
+    "dev:backend": "python3 app/server.py",
+    "dev": "npm run dev:frontend",
+    "build": "npm run build --prefix web",
+    "start": "python3 app/server.py",
+    "test": "pytest"
+  },
+  "keywords": ["uav", "mission-planning", "alns", "cp-sat", "react", "tailwindcss"],
+  "author": "AeroScan-Optima Engineering Team",
+  "license": "ISC"
+}

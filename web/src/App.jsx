@@ -1,0 +1,241 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Header from './components/Header';
+import Sidebar from './components/Sidebar';
+import OperationsMap from './components/OperationsMap';
+import FleetTelemetry from './components/FleetTelemetry';
+import OptimizationLab from './components/OptimizationLab';
+import EnergyBattery from './components/EnergyBattery';
+import MissionExport from './components/MissionExport';
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('map');
+  const [scenario, setScenario] = useState('Chao Set 64 (Clustered SAR)');
+  const [fleetSize, setFleetSize] = useState(3);
+  const [windSpeed, setWindSpeed] = useState(3.5);
+  const [windDir, setWindDir] = useState(45.0);
+
+  const [instance, setInstance] = useState(null);
+  const [schedule, setSchedule] = useState(null);
+  const [graspSchedule, setGraspSchedule] = useState(null);
+  const [maxMissionTime, setMaxMissionTime] = useState(600.0);
+  const [missionTime, setMissionTime] = useState(0.0);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  const [telemetry, setTelemetry] = useState([]);
+  const [securedTargets, setSecuredTargets] = useState([]);
+  const [isSolving, setIsSolving] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
+
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
+  // Initial Boot: Load Mock Schedule or Canonical Instance
+  useEffect(() => {
+    const bootInit = async () => {
+      try {
+        const res = await fetch('/api/mock');
+        if (res.ok) {
+          const data = await res.json();
+          setInstance(data.instance);
+          setSchedule(data.schedule);
+          setGraspSchedule(data.grasp_schedule);
+          setMaxMissionTime(data.max_mission_time || 600.0);
+          setTelemetry(data.telemetry_init || []);
+          setSecuredTargets(data.secured_targets_init || []);
+          showToast(`Mission initialized: ${data.instance.instance_name}`);
+        } else {
+          // Fallback to solving
+          handleRunOptimizer();
+        }
+      } catch (err) {
+        console.warn('API mock init failed, running solver:', err);
+        handleRunOptimizer();
+      }
+    };
+    bootInit();
+  }, []);
+
+  // Solve Optimizer
+  const handleRunOptimizer = async () => {
+    setIsSolving(true);
+    try {
+      const res = await fetch('/api/solve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenario,
+          fleet_size: fleetSize,
+          wind_speed: windSpeed,
+          wind_dir: windDir,
+          max_iterations: 200,
+          time_limit_sec: 1.2,
+        }),
+      });
+
+      if (!res.ok) throw new Error('Solver failed');
+      const data = await res.json();
+      setInstance(data.instance);
+      setSchedule(data.schedule);
+      setGraspSchedule(data.grasp_schedule);
+      setMaxMissionTime(data.max_mission_time || 600.0);
+      setTelemetry(data.telemetry_init || []);
+      setSecuredTargets(data.secured_targets_init || []);
+      setMissionTime(0.0);
+      setIsPlaying(false);
+      showToast(`Swarm solved: ${data.schedule.cumulative_reward.toFixed(0)} pts in ${data.schedule.solve_time_seconds.toFixed(2)}s`);
+    } catch (err) {
+      console.error('Error running optimizer:', err);
+      showToast('Solver execution failed. Check backend service.');
+    } finally {
+      setIsSolving(false);
+    }
+  };
+
+  // Load Mock Fixture
+  const handleLoadMock = async () => {
+    try {
+      const res = await fetch('/api/mock');
+      if (!res.ok) throw new Error('Failed to load mock');
+      const data = await res.json();
+      setInstance(data.instance);
+      setSchedule(data.schedule);
+      setGraspSchedule(data.grasp_schedule);
+      setMaxMissionTime(data.max_mission_time || 600.0);
+      setTelemetry(data.telemetry_init || []);
+      setSecuredTargets(data.secured_targets_init || []);
+      setMissionTime(0.0);
+      setIsPlaying(false);
+      showToast('Loaded benchmark mock mission fixture');
+    } catch (err) {
+      console.error('Error loading mock:', err);
+      showToast('Could not load mock fixture');
+    }
+  };
+
+  // Real-time telemetry updates during scrubbing or playback
+  const lastTelemReqRef = useRef(0);
+  useEffect(() => {
+    if (!schedule || !instance) return;
+
+    const now = performance.now();
+    // Throttle network requests to ~10Hz max (100ms)
+    if (now - lastTelemReqRef.current < 80) return;
+    lastTelemReqRef.current = now;
+
+    const fetchTelem = async () => {
+      try {
+        const res = await fetch('/api/telemetry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            t_sec: missionTime,
+            schedule,
+            instance,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setTelemetry(data.telemetry || []);
+          setSecuredTargets(data.secured_targets || []);
+        }
+      } catch (err) {
+        // Silently skip if interrupted
+      }
+    };
+
+    fetchTelem();
+  }, [missionTime, schedule, instance]);
+
+  return (
+    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans select-none">
+      {/* Sidebar Navigation */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        scenario={scenario}
+        setScenario={setScenario}
+        fleetSize={fleetSize}
+        setFleetSize={setFleetSize}
+        windSpeed={windSpeed}
+        setWindSpeed={setWindSpeed}
+        windDir={windDir}
+        setWindDir={setWindDir}
+        onRunOptimizer={handleRunOptimizer}
+        onLoadMock={handleLoadMock}
+        isSolving={isSolving}
+        instance={instance}
+        schedule={schedule}
+      />
+
+      {/* Main Mission Operations Viewport */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top Command Bar */}
+        <Header
+          instance={instance}
+          schedule={schedule}
+          isSolving={isSolving}
+        />
+
+        {/* Content Area */}
+        <main className="flex-1 overflow-y-auto p-5 bg-slate-950 bg-tactical-grid space-y-4">
+          {activeTab === 'map' && (
+            <OperationsMap
+              instance={instance}
+              schedule={schedule}
+              graspSchedule={graspSchedule}
+              maxMissionTime={maxMissionTime}
+              missionTime={missionTime}
+              setMissionTime={setMissionTime}
+              isPlaying={isPlaying}
+              setIsPlaying={setIsPlaying}
+              telemetry={telemetry}
+              securedTargets={securedTargets}
+            />
+          )}
+
+          {activeTab === 'telemetry' && (
+            <FleetTelemetry
+              instance={instance}
+              schedule={schedule}
+              telemetry={telemetry}
+              missionTime={missionTime}
+            />
+          )}
+
+          {activeTab === 'arena' && (
+            <OptimizationLab
+              instance={instance}
+              schedule={schedule}
+              graspSchedule={graspSchedule}
+            />
+          )}
+
+          {activeTab === 'energy' && (
+            <EnergyBattery
+              instance={instance}
+              schedule={schedule}
+              missionTime={missionTime}
+            />
+          )}
+
+          {activeTab === 'export' && (
+            <MissionExport
+              instance={instance}
+              schedule={schedule}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Floating Tactical Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl bg-slate-900 border border-sky-500/40 text-sky-200 text-xs font-mono shadow-2xl flex items-center gap-2 backdrop-blur-md animate-bounce">
+          <span className="w-2 h-2 rounded-full bg-sky-400"></span>
+          <span>{toastMessage}</span>
+        </div>
+      )}
+    </div>
+  );
+}

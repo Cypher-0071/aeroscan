@@ -47,3 +47,9 @@ htmlcov/
 # Logs & dumps
 *.log
 *.raw.html
+
+# Node & Web Frontend
+node_modules/
+web/node_modules/
+web/dist/
+.vite/

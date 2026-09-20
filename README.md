@@ -98,9 +98,16 @@ uv pip install -e ".[dev]"
 uv run pytest -v
 ```
 
-### Launching Mission Control UI
+### Launching Mission Control UI (React + Tailwind CSS v4)
 ```bash
-uv run streamlit run app/dashboard.py
+# Option 1: Start full stack (Python API Backend + React Frontend)
+npm run start           # Starts Flask API on http://127.0.0.1:5001 serving production web/dist
+# Or for live hot-reload development:
+python3 app/server.py   # In Terminal 1 (Backend API on http://127.0.0.1:5001)
+npm run dev --prefix web # In Terminal 2 (React Vite Dev on http://localhost:5173)
+
+# Option 2: Classic Streamlit Interface (Deprecated)
+python3 -m streamlit run app/dashboard.py
 ```
 
 ### Running Comparative Benchmarks
