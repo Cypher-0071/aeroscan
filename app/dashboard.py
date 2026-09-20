@@ -30,6 +30,7 @@ from app.telemetry import (
 )
 from app.visualizer import (
     build_3d_terrain_mission_figure,
+    build_animated_mission_map_figure,
     build_battery_soc_figure,
     build_energy_breakdown_figure,
     build_mission_map_figure,
@@ -125,168 +126,198 @@ button[data-testid="baseButton-header"],
 [data-testid="stSidebar"] {
     background: #FFFFFF !important;
     border-right: 1px solid #E2E8F0 !important;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.02) !important;
+    box-shadow: none !important;
     z-index: 100 !important;
-    min-width: 300px !important;
-    max-width: 330px !important;
+    min-width: 292px !important;
+    max-width: 322px !important;
 }
 [data-testid="stSidebar"] > div:first-child,
 [data-testid="stSidebarContent"] {
-    padding: 12px 14px 14px 14px !important;
+    padding: 18px 16px 16px 16px !important;
     background: #FFFFFF !important;
 }
 
 [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-    gap: 0.6rem !important;
+    gap: 0.55rem !important;
 }
 [data-testid="stSidebar"] div[data-testid="stHorizontalBlock"] {
-    gap: 0.5rem !important;
+    gap: 0.6rem !important;
 }
 
+/* Micro section header: tiny caps label with hairline rule */
+.side-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 2px 2px 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: #94A3B8;
+    text-transform: uppercase;
+}
+.side-section::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #EEF2F6;
+}
+
+/* Brand */
 .nav-rail-brand {
-    padding-bottom: 8px;
-    border-bottom: 1px solid #F1F5F9;
-    margin-bottom: 4px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    padding: 0 2px 14px 2px;
+    border-bottom: 1px solid #EEF2F6;
+    margin-bottom: 8px;
 }
 .brand-left {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
 }
 .nav-brand-text {
-    font-size: 13.5px !important;
+    font-family: 'Inter', -apple-system, sans-serif !important;
+    font-size: 15px !important;
     font-weight: 700 !important;
     color: #0F172A !important;
-    letter-spacing: 0.05em !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    line-height: 1.1;
+    letter-spacing: -0.01em !important;
+    line-height: 1.15;
 }
 .nav-brand-sub {
-    font-size: 9px !important;
-    color: #64748B !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 8.5px !important;
+    color: #94A3B8 !important;
     font-weight: 600 !important;
-    letter-spacing: 0.04em !important;
-    margin-top: 1px !important;
+    letter-spacing: 0.14em !important;
+    margin-top: 2px !important;
 }
 .nav-brand-badge {
-    font-size: 9px !important;
-    font-weight: 700 !important;
-    color: #0284C7 !important;
-    background: #EFF6FF !important;
-    border: 1px solid #BAE6FD !important;
-    padding: 2px 6px !important;
-    border-radius: 4px !important;
     font-family: 'JetBrains Mono', monospace !important;
+    font-size: 8.5px !important;
+    font-weight: 700 !important;
+    color: #64748B !important;
+    background: #F8FAFC !important;
+    border: 1px solid #E2E8F0 !important;
+    padding: 2px 8px !important;
+    border-radius: 99px !important;
+    letter-spacing: 0.06em !important;
 }
 
-/* Sidebar Widget Labels */
+/* Sidebar field labels: quiet Inter, sentence case */
 [data-testid="stSidebar"] [data-testid="stWidgetLabel"] label,
 [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
 [data-testid="stSidebar"] label[data-testid="stWidgetLabel"] {
-    font-size: 10px !important;
-    font-weight: 700 !important;
-    color: #64748B !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.07em !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    margin-bottom: 4px !important;
-    display: block !important;
+    font-family: 'Inter', -apple-system, sans-serif !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    letter-spacing: 0.01em !important;
+    text-transform: none !important;
+    margin-bottom: 5px !important;
 }
 
-/* ── Workspace Selection Navigation Rail ── */
+/* ── Workspace Navigation: quiet full-width rows, left accent on active ── */
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {
-    gap: 3px !important;
+    gap: 2px !important;
     display: flex !important;
     flex-direction: column !important;
+    align-items: stretch !important;
 }
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label {
-    background: #F8FAFC !important;
-    border: 1px solid #E2E8F0 !important;
-    border-radius: 6px !important;
-    padding: 6px 10px !important;
+    width: 100% !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 7px !important;
+    padding: 8px 10px !important;
     margin: 0 !important;
     cursor: pointer !important;
-    transition: all 0.15s ease !important;
+    transition: background 0.12s ease !important;
     display: flex !important;
     align-items: center !important;
 }
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child,
+[data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label input[type="radio"] {
+    display: none !important;
+}
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:hover {
-    background: #EFF6FF !important;
-    border-color: #BAE6FD !important;
+    background: #F6F8FA !important;
 }
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) {
-    background: #EFF6FF !important;
-    border-color: #0284C7 !important;
-    border-left: 4px solid #0284C7 !important;
-    box-shadow: 0 1px 3px rgba(2, 132, 199, 0.12) !important;
+    background: #F0F9FF !important;
+    box-shadow: inset 3px 0 0 #0284C7 !important;
 }
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) div,
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) span,
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label:has(input:checked) p {
-    color: #0284C7 !important;
-    font-weight: 700 !important;
+    color: #0369A1 !important;
+    font-weight: 600 !important;
 }
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label div,
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label span,
 [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] > label p {
     color: #334155 !important;
-    font-size: 11.5px !important;
-    font-weight: 600 !important;
-    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    font-family: 'Inter', -apple-system, sans-serif !important;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    white-space: nowrap !important;
     margin: 0 !important;
 }
 
-/* Mission Context Box */
+/* Mission Context Card */
 .mission-context-box {
     background: #F8FAFC;
-    border: 1px solid #E2E8F0;
-    border-radius: 6px;
-    padding: 7px 10px;
-    margin: 5px 0 6px 0;
+    border: 1px solid #EEF2F6;
+    border-radius: 10px;
+    padding: 10px 12px 11px 12px;
+    margin: 6px 0 2px 0;
 }
 .m-ctx-title {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
     color: #0F172A;
     font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.02em;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 5px;
+    margin-bottom: 9px;
 }
 .m-ctx-status {
-    font-size: 9px;
+    font-size: 8.5px;
     font-weight: 700;
     color: #059669;
     background: #ECFDF5;
-    padding: 1px 5px;
-    border-radius: 3px;
+    padding: 1px 7px;
+    border-radius: 99px;
     border: 1px solid #A7F3D0;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.08em;
 }
 .m-ctx-grid {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding-top: 4px;
-    border-top: 1px solid #F1F5F9;
+    align-items: flex-start;
+    gap: 10px;
 }
 .m-stat {
     display: flex;
     flex-direction: column;
+    gap: 3px;
 }
 .m-lbl {
-    font-size: 8px;
+    font-size: 8.5px;
     font-weight: 600;
-    color: #64748B;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.04em;
+    color: #94A3B8;
+    font-family: 'Inter', -apple-system, sans-serif;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
 }
 .m-val {
-    font-size: 11px;
+    font-size: 12.5px;
     font-weight: 700;
     color: #0F172A;
     font-family: 'JetBrains Mono', monospace;
@@ -295,37 +326,38 @@ button[data-testid="baseButton-header"],
 /* Selectbox in Sidebar */
 [data-testid="stSidebar"] [data-testid="stSelectbox"] > div > div,
 [data-testid="stSidebar"] [data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-    min-height: 36px !important;
-    height: 36px !important;
+    min-height: 34px !important;
+    height: 34px !important;
     font-size: 12px !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    border: 1px solid #CBD5E1 !important;
-    border-radius: 6px !important;
+    font-family: 'Inter', -apple-system, sans-serif !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 8px !important;
     background: #FFFFFF !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
     display: flex !important;
     align-items: center !important;
 }
 
-/* Sliders in Sidebar */
+/* Sliders in Sidebar (headroom for the floating value pill) */
 [data-testid="stSidebar"] [data-testid="stSlider"] {
-    padding-top: 1px !important;
-    padding-bottom: 2px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
 }
 [data-testid="stSidebar"] [data-testid="stSlider"] div[data-baseweb="slider"] {
-    padding-top: 5px !important;
-    padding-bottom: 5px !important;
+    padding-top: 14px !important;
+    padding-bottom: 6px !important;
 }
 
 /* Buttons in Sidebar */
 [data-testid="stSidebar"] .stButton > button {
     height: 36px !important;
     min-height: 36px !important;
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    font-family: 'Inter', -apple-system, sans-serif !important;
     letter-spacing: 0.01em !important;
-    border-radius: 6px !important;
-    padding: 0 6px !important;
+    border-radius: 8px !important;
+    padding: 0 8px !important;
     margin-top: 4px !important;
     margin-bottom: 2px !important;
     display: flex !important;
@@ -334,53 +366,56 @@ button[data-testid="baseButton-header"],
     white-space: nowrap !important;
     width: 100% !important;
     overflow: visible !important;
+    box-shadow: none !important;
 }
 [data-testid="stSidebar"] .stButton > button p,
 [data-testid="stSidebar"] .stButton > button span {
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    font-family: 'Inter', -apple-system, sans-serif !important;
     letter-spacing: 0.01em !important;
     white-space: nowrap !important;
     margin: 0 !important;
 }
 [data-testid="stSidebar"] .stButton > button[kind="primary"] {
-    background: #0284C7 !important;
-    border: 1px solid #0284C7 !important;
+    background: #0F172A !important;
+    border: 1px solid #0F172A !important;
     color: #FFFFFF !important;
-    box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25) !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.2) !important;
 }
 [data-testid="stSidebar"] .stButton > button[kind="primary"]:hover {
-    background: #0369A1 !important;
-    border-color: #0369A1 !important;
+    background: #1E293B !important;
+    border-color: #1E293B !important;
 }
 [data-testid="stSidebar"] .stButton > button:not([kind="primary"]) {
-    background: #F8FAFC !important;
-    border: 1px solid #CBD5E1 !important;
+    background: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
     color: #334155 !important;
 }
 [data-testid="stSidebar"] .stButton > button:not([kind="primary"]):hover {
-    background: #F1F5F9 !important;
-    border-color: #94A3B8 !important;
+    background: #F8FAFC !important;
+    border-color: #CBD5E1 !important;
     color: #0F172A !important;
 }
 
-/* System Avionics Card */
+/* System Footer (borderless, hairline top rule) */
 .sidebar-system-card {
-    background: #F8FAFC;
-    border: 1px solid #E2E8F0;
-    border-radius: 6px;
-    padding: 6px 10px;
-    margin-top: 6px;
+    background: transparent;
+    border: none;
+    border-top: 1px solid #EEF2F6;
+    border-radius: 0;
+    padding: 12px 2px 0 2px;
+    margin-top: 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 .sys-chip {
-    font-size: 9.5px;
+    font-size: 8.5px;
     font-weight: 600;
-    color: #475569;
+    color: #64748B;
     font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.05em;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -396,7 +431,7 @@ button[data-testid="baseButton-header"],
 /* ── Top Header Context Bar (Avionics Command Deck) ── */
 .top-ops-bar {
     background: #FFFFFF;
-    border: 1px solid #CBD5E1;
+    border: 1px solid #E2E8F0;
     border-top: 3px solid #0284C7;
     border-radius: 8px;
     padding: 7px 14px;
@@ -407,11 +442,9 @@ button[data-testid="baseButton-header"],
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
     min-height: 48px;
     flex-wrap: nowrap !important;
-    gap: 12px;
-    overflow-x: auto;
-    scrollbar-width: none;
+    gap: 10px;
+    overflow: visible;
 }
-.top-ops-bar::-webkit-scrollbar { display: none; }
 
 .top-title-wrap {
     display: flex;
@@ -419,6 +452,34 @@ button[data-testid="baseButton-header"],
     gap: 10px;
     white-space: nowrap !important;
     flex-shrink: 0 !important;
+}
+.top-meta-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    overflow: hidden;
+    justify-content: flex-end;
+}
+.top-meta-group > div { flex-shrink: 0; }
+
+/* Instruments compress on narrower screens instead of clipping */
+@media (min-width: 1501px) and (max-width: 1780px) {
+    .tac-instrument:nth-of-type(1) { display: none !important; }
+}
+@media (max-width: 1500px) {
+    .tac-instrument, .tac-zulu-card { display: none !important; }
+}
+@media (max-width: 1280px) {
+    .tac-mission-meta { display: none !important; }
+    .tac-callsign-text { font-size: 10.5px !important; }
+    .tac-status-badge { padding: 5px 8px !important; font-size: 10px !important; }
+}
+@media (max-width: 760px) {
+    .top-ops-bar { flex-wrap: wrap !important; }
+    .top-title-wrap { flex-shrink: 1 !important; }
 }
 .tac-callsign-box {
     background: #0F172A;
@@ -603,9 +664,19 @@ button[data-testid="baseButton-header"],
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    row-gap: 6px;
     padding-bottom: 7px;
     margin-bottom: 6px;
     border-bottom: 1px solid #F1F5F9;
+}
+.deck-title-text,
+.deck-sensors-badge,
+.deck-time-badge {
+    white-space: nowrap !important;
+}
+.deck-sensors-badge {
+    padding: 2px 7px !important;
 }
 .deck-title-col {
     display: flex;
@@ -673,6 +744,11 @@ button[data-testid="baseButton-header"],
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 5px;
+}
+.pipeline-step .pipe-idx,
+.pipeline-step .pipe-name {
+    white-space: nowrap;
 }
 .pipeline-step .pipe-idx {
     font-size: 8px;
@@ -777,6 +853,7 @@ div[data-testid="stRadio"] div[role="radiogroup"] > label p {
     color: #475569 !important;
     margin: 0 !important;
     text-transform: uppercase !important;
+    white-space: nowrap !important;
 }
 
 /* ── Cockpit Sensor Push-Buttons (Transform st.checkbox) ── */
@@ -795,13 +872,7 @@ div[data-testid="stCheckbox"] label {
     transition: all 0.15s ease !important;
     width: 100% !important;
     margin: 0 !important;
-}
-/* Hide native checkbox square */
-div[data-testid="stCheckbox"] label > div:first-child {
-    display: none !important;
-}
-div[data-testid="stCheckbox"] label input[type="checkbox"] {
-    display: none !important;
+    white-space: nowrap !important;
 }
 div[data-testid="stCheckbox"]:hover label {
     background: #F1F5F9 !important;
@@ -818,28 +889,16 @@ div[data-testid="stCheckbox"]:has(input:checked) label p {
     color: #0284C7 !important;
     font-weight: 700 !important;
 }
-div[data-testid="stCheckbox"]:has(input:checked) label::before {
-    content: "●";
-    color: #0284C7;
-    font-size: 9px;
-    margin-right: 5px;
-    filter: drop-shadow(0 0 3px rgba(2, 132, 199, 0.6));
-}
-div[data-testid="stCheckbox"]:not(:has(input:checked)) label::before {
-    content: "○";
-    color: #94A3B8;
-    font-size: 9px;
-    margin-right: 5px;
-}
 div[data-testid="stCheckbox"] label span,
 div[data-testid="stCheckbox"] label p {
     font-size: 10px !important;
     font-weight: 600 !important;
     font-family: 'JetBrains Mono', monospace !important;
-    letter-spacing: 0.03em !important;
+    letter-spacing: 0.02em !important;
     color: #475569 !important;
     margin: 0 !important;
     text-transform: uppercase !important;
+    white-space: nowrap !important;
 }
 
 /* ── Bordered Container Cards (HUD Toolbar) ── */
@@ -1017,10 +1076,9 @@ div[data-testid="stCheckbox"] label p {
     width: 14px !important;
     height: 14px !important;
 }
-[data-testid="stSlider"] div[data-baseweb="slider"] > div:first-child > div:first-child {
-    background: #E2E8F0 !important;
-    height: 4px !important;
-    border-radius: 2px !important;
+[data-testid="stSlider"] div[data-baseweb="slider"] {
+    padding-top: 12px !important;
+    padding-bottom: 6px !important;
 }
 [data-testid="stSlider"] div[data-baseweb="slider"] > div:first-child > div:nth-child(2) {
     background: #0284C7 !important;
@@ -1029,13 +1087,15 @@ div[data-testid="stCheckbox"] label p {
 }
 [data-testid="stSliderThumbValue"],
 [data-testid="stThumbValue"] {
-    background: #0F172A !important;
-    color: #FFFFFF !important;
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    border: 1px solid #E2E8F0 !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05) !important;
     font-family: 'JetBrains Mono', monospace !important;
     font-size: 10px !important;
-    font-weight: 700 !important;
-    padding: 2px 6px !important;
-    border-radius: 4px !important;
+    font-weight: 600 !important;
+    padding: 1px 6px !important;
+    border-radius: 5px !important;
 }
 
 /* ── Selectboxes & Inputs ── */
@@ -1133,11 +1193,138 @@ pre, code {
     background: #FFFFFF !important;
 }
 
+/* ── Global action buttons: consistent modest height ── */
+.stButton > button {
+    height: 34px !important;
+    min-height: 34px !important;
+    padding: 0 16px !important;
+}
+
+/* ── Cockpit Transport Bar (centered playback controls) ── */
+.transport-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 2px 0 2px 0;
+}
+.transport-btn > button {
+    min-width: 132px !important;
+    height: 34px !important;
+    border-radius: 8px !important;
+}
+.transport-btn-stop > button {
+    min-width: 86px !important;
+    height: 34px !important;
+    border-radius: 8px !important;
+}
+.transport-btn-stop > button p,
+.transport-btn-stop > button span {
+    letter-spacing: 0.08em !important;
+}
+
+/* ── Cockpit Sensor Pills: compact so five cells never squeeze their labels ── */
+div[data-testid="stCheckbox"] label {
+    padding: 4px 7px !important;
+}
+div[data-testid="stCheckbox"] label span,
+div[data-testid="stCheckbox"] label p {
+    font-size: 9.5px !important;
+    letter-spacing: 0.01em !important;
+}
+
 /* ── Scrollbars ── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: #F4F7FA; }
 ::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* ── Boot / Loading Overlay: fullscreen centered, large text ── */
+[data-testid="stSpinner"] {
+    position: fixed !important;
+    inset: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: #F4F7FA !important;
+    z-index: 9999 !important;
+}
+[data-testid="stSpinner"] > div {
+    justify-content: center !important;
+    align-items: center !important;
+    flex-direction: column !important;
+    gap: 18px !important;
+}
+[data-testid="stSpinner"] p {
+    font-size: 24px !important;
+    font-weight: 700 !important;
+    color: #0F172A !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    text-align: center !important;
+}
+[data-testid="stSpinner"] [data-testid="stSpinnerIndicator"] {
+    width: 44px !important;
+    height: 44px !important;
+}
+
+.aeroscan-loader-wrap {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #F4F7FA;
+    z-index: 9998;
+}
+.aeroscan-loader-card {
+    text-align: center;
+    max-width: 560px;
+    padding: 40px 48px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-top: 4px solid #0284C7;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+}
+.aeroscan-loader-title {
+    font-size: 30px;
+    font-weight: 800;
+    color: #0F172A;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.06em;
+    margin: 12px 0 6px 0;
+}
+.aeroscan-loader-sub {
+    font-size: 15px;
+    font-weight: 600;
+    color: #0284C7;
+    font-family: 'JetBrains Mono', monospace;
+    margin-bottom: 16px;
+}
+.aeroscan-loader-lines {
+    font-size: 14px;
+    color: #475569;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1.9;
+}
+.aeroscan-loader-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #E2E8F0;
+    overflow: hidden;
+    margin-top: 20px;
+}
+.aeroscan-loader-bar > div {
+    height: 100%;
+    width: 40%;
+    border-radius: 3px;
+    background: #0284C7;
+    animation: aeroscan-slide 1.2s ease-in-out infinite alternate;
+}
+@keyframes aeroscan-slide {
+    from { margin-left: 0; }
+    to { margin-left: 60%; }
+}
 </style>
 """
 st.markdown(AEROSCAN_CSS, unsafe_allow_html=True)
@@ -1176,6 +1363,26 @@ def load_initial_instance(
     )
 
 
+# ---------------------------------------------------------------------------
+# Boot Loader (centered, large connecting status)
+# ---------------------------------------------------------------------------
+BOOT_LOADER_HTML = f"""
+<div class="aeroscan-loader-wrap">
+    <div class="aeroscan-loader-card">
+        <div>{SVG_AERO_LOGO.replace('width="22" height="22"', 'width="42" height="42"')}</div>
+        <div class="aeroscan-loader-title">AEROSCAN</div>
+        <div class="aeroscan-loader-sub">CONNECTING TO MISSION OPERATIONS ...</div>
+        <div class="aeroscan-loader-lines">
+            Linking UAV fleet telemetry ...<br/>
+            Loading mission scenario ...<br/>
+            Solving mission schedule ...
+        </div>
+        <div class="aeroscan-loader-bar"><div></div></div>
+    </div>
+</div>
+"""
+
+
 def initialize_state():
     """Initializes default mission session state."""
     if "instance" not in st.session_state:
@@ -1183,13 +1390,15 @@ def initialize_state():
             "Chao Set 64 (Clustered SAR)", 3, 3.5, 45.0
         )
     if "schedule" not in st.session_state:
-        with st.spinner("Solving mission schedule..."):
-            pool = explore_route_pool(
-                st.session_state.instance, max_iterations=150, time_limit_sec=0.8
-            )
-            st.session_state.schedule = solve_fleet_schedule(
-                st.session_state.instance, pool, run_baselines=True
-            )
+        loader = st.empty()
+        loader.markdown(BOOT_LOADER_HTML, unsafe_allow_html=True)
+        pool = explore_route_pool(
+            st.session_state.instance, max_iterations=150, time_limit_sec=0.8
+        )
+        st.session_state.schedule = solve_fleet_schedule(
+            st.session_state.instance, pool, run_baselines=True
+        )
+        loader.empty()
     if "grasp_schedule" not in st.session_state:
         st.session_state.grasp_schedule = solve_grasp_baseline(st.session_state.instance)
     if "selected_inspector_obj" not in st.session_state:
@@ -1223,8 +1432,9 @@ with st.sidebar:
     )
 
     # Workspace View Selector
+    st.markdown('<div class="side-section">Workspace</div>', unsafe_allow_html=True)
     workspace_choice = st.radio(
-        "NAVIGATION MODULES",
+        "Navigation",
         [
             "01 Operations Map",
             "02 Fleet Telemetry",
@@ -1233,6 +1443,7 @@ with st.sidebar:
             "05 Mission Export",
         ],
         index=0,
+        label_visibility="collapsed",
     )
 
     # Active Mission Context Box
@@ -1248,7 +1459,7 @@ with st.sidebar:
                 <span class="m-ctx-status">ACTIVE</span>
             </div>
             <div class="m-ctx-grid">
-                <div class="m-stat"><span class="m-lbl">FLEET</span><span class="m-val">{len(schedule.assigned_routes):02d} UAVs</span></div>
+                <div class="m-stat"><span class="m-lbl">FLEET</span><span class="m-val">{len(instance.drones):02d} UAVs</span></div>
                 <div class="m-stat"><span class="m-lbl">TARGETS</span><span class="m-val">{total_cnt}</span></div>
                 <div class="m-stat"><span class="m-lbl">COVERAGE</span><span class="m-val">{cov_pct:.0f}%</span></div>
             </div>
@@ -1258,8 +1469,9 @@ with st.sidebar:
     )
 
     # Mission Configuration Controls
+    st.markdown('<div class="side-section">Mission Setup</div>', unsafe_allow_html=True)
     scenario_choice = st.selectbox(
-        "MISSION SCENARIO",
+        "Scenario",
         [
             "Chao Set 64 (Clustered SAR)",
             "Chao Set 66 (Diamond Perimeter)",
@@ -1274,7 +1486,7 @@ with st.sidebar:
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         fleet_size = st.slider(
-            "FLEET CAPACITY",
+            "Fleet size",
             min_value=2,
             max_value=8,
             value=3,
@@ -1282,7 +1494,7 @@ with st.sidebar:
         )
     with col_p2:
         wind_speed = st.slider(
-            "WIND VELOCITY",
+            "Wind speed",
             min_value=0.0,
             max_value=15.0,
             value=3.5,
@@ -1291,7 +1503,7 @@ with st.sidebar:
         )
 
     wind_dir = st.slider(
-        "WIND AZIMUTH VECTOR",
+        "Wind direction",
         min_value=0.0,
         max_value=360.0,
         value=45.0,
@@ -1301,9 +1513,9 @@ with st.sidebar:
 
     c_btn1, c_btn2 = st.columns([1.35, 1.0])
     with c_btn1:
-        run_opt = st.button("EXECUTE ALNS", type="primary", use_container_width=True)
+        run_opt = st.button("Run Optimizer", type="primary", use_container_width=True)
     with c_btn2:
-        load_mock = st.button("LOAD MOCK", use_container_width=True)
+        load_mock = st.button("Load Mock", use_container_width=True)
 
     if run_opt:
         with st.spinner("Executing ALNS trajectory exploration & CP-SAT solver..."):
@@ -1313,10 +1525,39 @@ with st.sidebar:
             sched = solve_fleet_schedule(inst, route_pool, run_baselines=True)
             st.session_state.schedule = sched
             st.session_state.grasp_schedule = solve_grasp_baseline(inst)
+            st.session_state.mission_config = (scenario_choice, fleet_size, wind_speed, wind_dir)
+            st.session_state.mission_t = 0.0
+            st.session_state.mission_playing = False
             st.toast(
                 f"Swarm solved: {sched.cumulative_reward:.0f} pts in {sched.solve_time_seconds:.2f}s",
                 icon="✅",
             )
+
+    # Reactive fleet: slider changes rebuild the swarm immediately so the
+    # exact number of selected drones appears scouting on the map.
+    applied_cfg = st.session_state.get("mission_config")
+    current_cfg = (scenario_choice, fleet_size, wind_speed, wind_dir)
+    if applied_cfg is None:
+        st.session_state.mission_config = (
+            scenario_choice, len(st.session_state.instance.drones),
+            wind_speed, wind_dir,
+        )
+    elif current_cfg != applied_cfg and not run_opt:
+        with st.spinner(f"Rebuilding swarm for {fleet_size} UAVs..."):
+            inst = load_initial_instance(scenario_choice, fleet_size, wind_speed, wind_dir)
+            st.session_state.instance = inst
+            route_pool = explore_route_pool(inst, max_iterations=150, time_limit_sec=0.8)
+            sched = solve_fleet_schedule(inst, route_pool, run_baselines=True)
+            st.session_state.schedule = sched
+            st.session_state.grasp_schedule = solve_grasp_baseline(inst)
+            st.session_state.mission_config = current_cfg
+            st.session_state.mission_t = 0.0
+            st.session_state.mission_playing = False
+            st.toast(
+                f"Fleet: {len(inst.drones)} UAVs · {len(sched.assigned_routes)} route(s) assigned",
+                icon="✅",
+            )
+            st.rerun()
 
     if load_mock:
         mock_path = Path("tests/mock_schedule.json")
@@ -1372,7 +1613,7 @@ st.markdown(
             </div>
             <div class="tac-status-badge">
                 <span class="live-dot-pulse"></span>
-                <b>{schedule.status}</b> // OPTIMAL
+                <b>{schedule.status}</b>
             </div>
             <div class="tac-zulu-card">
                 {SVG_CLOCK} <b>{now_utc}</b>
@@ -1397,107 +1638,166 @@ if "01 Operations Map" in workspace_choice:
     # Tactical HUD Controls Over Map (Glass Cockpit Mission Director Deck)
     with st.container(border=True):
         init_val = float(min(300.0, max_mission_time))
-        curr_val = float(st.session_state.get("mission_timeline_slider", init_val))
-        frac_preview = curr_val / max(max_mission_time, 1.0)
+        if "mission_t" not in st.session_state:
+            st.session_state.mission_t = init_val
+        if "mission_playing" not in st.session_state:
+            st.session_state.mission_playing = False
 
+        top_c1, top_c2 = st.columns([1.35, 1.0], gap="medium")
+        with top_c1:
+            view_mode = st.radio(
+                "Canvas Projection",
+                ["2D Map", "3D Terrain"],
+                horizontal=True,
+                label_visibility="collapsed",
+            )
+        with top_c2:
+            map_rotation = st.selectbox(
+                "Orientation",
+                [90, 180, 270, 0],
+                index=0,
+                label_visibility="collapsed",
+                format_func=lambda deg: f"Rotate: {deg}°",
+            )
+
+        # Sensor toggles: five equal cells across the full deck width
+        g1, g2, g3, g4, g5 = st.columns(5, gap="small")
+        with g1:
+            halos = st.checkbox("Radar Halos", value=True)
+        with g2:
+            breadcrumbs = st.checkbox("Flight Paths", value=True)
+        with g3:
+            range_rings = st.checkbox("Range Rings", value=True)
+        with g4:
+            tactical_canvas = st.checkbox("Tactical Canvas", value=True)
+        with g5:
+            uav_icons = st.checkbox("UAV Icons", value=True)
+
+    @st.fragment
+    def mission_map_fragment():
+        """Mission map deck. Reruns only on user interaction — playback motion
+        is handled entirely in the browser by the animated figure, so there are
+        no periodic server ticks and no chart re-uploads while flying."""
+        t = float(st.session_state.get("mission_t", init_val))
+        frac = t / max(float(max_mission_time), 1.0)
         st.markdown(
             f"""
             <div class="deck-header-row">
                 <div class="deck-title-col">
                     <span class="deck-title-text">FLIGHT TIMELINE // MISSION CHRONOLOGY</span>
-                    <span class="deck-time-badge">MET T+{curr_val:04.0f}s / {max_mission_time:04.0f}s ({frac_preview * 100:04.1f}%)</span>
+                    <span class="deck-time-badge">MET T+{t:04.0f}s / {float(max_mission_time):04.0f}s ({frac * 100:04.1f}%)</span>
                 </div>
                 <div class="deck-title-col right">
                     <span class="deck-title-text">TACTICAL SENSOR MATRIX &amp; PROJECTION</span>
-                    <span class="deck-sensors-badge"><span class="sensor-live-dot"></span>ACTIVE SENSORS: 3/3</span>
+                    <span class="deck-sensors-badge"><span class="sensor-live-dot"></span>{'SCOUTING' if st.session_state.get('mission_playing') else 'HOLDING'}</span>
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        scrubber_col, ctrl_col = st.columns([1.45, 1.05], gap="large")
-        with scrubber_col:
-            t_current = st.slider(
-                "Mission Timeline",
-                min_value=0.0,
-                max_value=float(max_mission_time),
-                value=init_val,
-                step=5.0,
-                format="%0.0f sec",
-                key="mission_timeline_slider",
-                label_visibility="collapsed",
-            )
-            # Determine Current Operational Phase
-            frac = t_current / max(max_mission_time, 1.0)
-            p1 = "active" if frac < 0.15 else "completed"
-            p2 = "active" if 0.15 <= frac < 0.40 else ("completed" if frac >= 0.40 else "")
-            p3 = "active" if 0.40 <= frac < 0.70 else ("completed" if frac >= 0.70 else "")
-            p4 = "active" if 0.70 <= frac < 0.90 else ("completed" if frac >= 0.90 else "")
-            p5 = "active" if frac >= 0.90 else ""
+        # Compact transport controls: small side-by-side buttons, not half-deck slabs
+        btn_play, btn_stop, btn_gap = st.columns([0.6, 0.48, 2.8], gap="small")
+        with btn_play:
+            if st.button(
+                "▶ Execute", type="primary", use_container_width=True, key="exec_mission_btn"
+            ):
+                st.session_state.mission_t = 0.0
+                st.session_state.mission_playing = True
+        with btn_stop:
+            if st.button("■ Stop", use_container_width=True, key="stop_mission_btn"):
+                st.session_state.mission_playing = False
 
-            st.markdown(
-                f"""
-                <div class="mission-flight-pipeline">
-                    <div class="pipeline-step {p1}">
-                        <div class="pipe-header"><span class="pipe-idx">01</span><span class="pipe-name">DEPLOY</span></div>
-                        <div class="pipe-bar"></div>
-                    </div>
-                    <div class="pipeline-step {p2}">
-                        <div class="pipe-header"><span class="pipe-idx">02</span><span class="pipe-name">TRANSIT</span></div>
-                        <div class="pipe-bar"></div>
-                    </div>
-                    <div class="pipeline-step {p3}">
-                        <div class="pipe-header"><span class="pipe-idx">03</span><span class="pipe-name">CLUSTER</span></div>
-                        <div class="pipe-bar"></div>
-                    </div>
-                    <div class="pipeline-step {p4}">
-                        <div class="pipe-header"><span class="pipe-idx">04</span><span class="pipe-name">ACQUIRE</span></div>
-                        <div class="pipe-bar"></div>
-                    </div>
-                    <div class="pipeline-step {p5}">
-                        <div class="pipe-header"><span class="pipe-idx">05</span><span class="pipe-name">RECOVERY</span></div>
-                        <div class="pipe-bar"></div>
-                    </div>
+        t_slider = st.slider(
+            "Mission Timeline",
+            min_value=0.0,
+            max_value=float(max_mission_time),
+            value=t,
+            step=5.0,
+            format="%0.0f sec",
+            label_visibility="collapsed",
+        )
+        if abs(float(t_slider) - t) > 1e-6:
+            st.session_state.mission_t = float(t_slider)
+            st.session_state.mission_playing = False
+            t = float(t_slider)
+
+        p1 = "active" if frac < 0.15 else "completed"
+        p2 = "active" if 0.15 <= frac < 0.40 else ("completed" if frac >= 0.40 else "")
+        p3 = "active" if 0.40 <= frac < 0.70 else ("completed" if frac >= 0.70 else "")
+        p4 = "active" if 0.70 <= frac < 0.90 else ("completed" if frac >= 0.90 else "")
+        p5 = "active" if frac >= 0.90 else ""
+        st.markdown(
+            f"""
+            <div class="mission-flight-pipeline">
+                <div class="pipeline-step {p1}">
+                    <div class="pipe-header"><span class="pipe-idx">01</span><span class="pipe-name">DEPLOY</span></div>
+                    <div class="pipe-bar"></div>
                 </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-        with ctrl_col:
-            view_mode = st.radio(
-                "Canvas Projection",
-                ["2D Tactical Map", "3D Topography"],
-                horizontal=True,
-                label_visibility="collapsed",
-            )
-
-            c_l1, c_l2, c_l3 = st.columns(3)
-            with c_l1:
-                halos = st.checkbox("Radar Halos", value=True)
-            with c_l2:
-                breadcrumbs = st.checkbox("Flight Paths", value=True)
-            with c_l3:
-                range_rings = st.checkbox("Range Rings", value=True)
-
-    # Hero Map Figure
-    if view_mode == "2D Tactical Map":
-        fig_map = build_mission_map_figure(
-            instance=instance,
-            schedule=schedule,
-            current_time_sec=t_current,
-            show_radar_halos=halos,
-            show_breadcrumbs=breadcrumbs,
-            show_range_rings=range_rings,
+                <div class="pipeline-step {p2}">
+                    <div class="pipe-header"><span class="pipe-idx">02</span><span class="pipe-name">TRANSIT</span></div>
+                    <div class="pipe-bar"></div>
+                </div>
+                <div class="pipeline-step {p3}">
+                    <div class="pipe-header"><span class="pipe-idx">03</span><span class="pipe-name">CLUSTER</span></div>
+                    <div class="pipe-bar"></div>
+                </div>
+                <div class="pipeline-step {p4}">
+                    <div class="pipe-header"><span class="pipe-idx">04</span><span class="pipe-name">ACQUIRE</span></div>
+                    <div class="pipe-bar"></div>
+                </div>
+                <div class="pipeline-step {p5}">
+                    <div class="pipe-header"><span class="pipe-idx">05</span><span class="pipe-name">RECOVERY</span></div>
+                    <div class="pipe-bar"></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        st.plotly_chart(fig_map, use_container_width=True)
-    else:
-        fig_3d = build_3d_terrain_mission_figure(
-            instance=instance,
-            schedule=schedule,
-            current_time_sec=t_current,
-        )
-        st.plotly_chart(fig_3d, use_container_width=True)
+
+        # Browser-side animated map during playback (zero reruns, buttery smooth);
+        # the static figure is only rebuilt when scrubbing or toggling layers.
+        if st.session_state.get("mission_playing", False) and view_mode in (
+            "2D Tactical Map",
+            "2D Map",
+        ):
+            fig_map = build_animated_mission_map_figure(
+                instance=instance,
+                schedule=schedule,
+                n_frames=60,
+                show_range_rings=range_rings,
+                use_tactical_map=tactical_canvas,
+                map_opacity=0.88,
+                map_rotation_deg=map_rotation,
+            )
+            fig_map.update_layout(autosize=True)
+            st.plotly_chart(fig_map, use_container_width=True, key="mission_anim_chart")
+        elif view_mode in ("2D Tactical Map", "2D Map"):
+            fig_map = build_mission_map_figure(
+                instance=instance,
+                schedule=schedule,
+                current_time_sec=t,
+                show_radar_halos=halos,
+                show_breadcrumbs=breadcrumbs,
+                show_range_rings=range_rings,
+                use_tactical_map=tactical_canvas,
+                map_opacity=0.88,
+                map_rotation_deg=map_rotation,
+                show_uav_icons=uav_icons,
+            )
+            st.plotly_chart(fig_map, use_container_width=True, key="mission_static_chart")
+        else:
+            fig_3d = build_3d_terrain_mission_figure(
+                instance=instance,
+                schedule=schedule,
+                current_time_sec=t,
+            )
+            st.plotly_chart(fig_3d, use_container_width=True, key="mission_3d_chart")
+
+    from streamlit.components.v1 import html as _html
+    from app.mission_sim import render_mission_sim_html
+
+    _html(render_mission_sim_html(len(instance.drones)), height=980, scrolling=False)
 
     # Mission Intelligence Strip (Under Map)
     visited_cnt = sum(len(r.target_ids) for r in schedule.assigned_routes)
@@ -1534,7 +1834,9 @@ if "01 Operations Map" in workspace_choice:
     )
 
     # Context Inspector Panel (Interactive UAV & Target Object Inspection)
-    active_telem, secured_set = get_fleet_telemetry_at_time(schedule, t_current, instance)
+    active_telem, secured_set = get_fleet_telemetry_at_time(
+        schedule, float(st.session_state.get("mission_t", 300.0)), instance
+    )
     telem_by_id = {t["drone_id"]: t for t in active_telem}
 
     inspector_options = (

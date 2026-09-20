@@ -5,7 +5,7 @@ from __future__ import annotations
 import plotly.graph_objects as go
 import streamlit as st
 
-from app.visualizer import DRONE_COLORS
+from app.visualizer import DRONE_COLORS, get_tactical_map_data_uri, get_tactical_map_meta
 from core.contracts import FleetSchedule, InstanceContext
 
 
@@ -14,6 +14,8 @@ def build_comparison_map(
     schedule: FleetSchedule,
     selected_drone_id: str | None = None,
     accent_color: str = "#0284C7",
+    use_tactical_map: bool = True,
+    map_rotation_deg: int = 90,
 ) -> go.Figure:
     """Builds a clean light-theme tactical route trajectory map without internal title collisions."""
     fig = go.Figure()
@@ -106,22 +108,63 @@ def build_comparison_map(
             )
         )
 
+    map_meta = get_tactical_map_meta(map_rotation_deg) if use_tactical_map else None
+    map_uri = map_meta[0] if map_meta else None
+    img_w = map_meta[1] if map_meta else 1024
+    img_h = map_meta[2] if map_meta else 738
+    is_map_active = bool(use_tactical_map and map_uri)
+
+    all_xs = [t.x for t in instance.targets]
+    all_ys = [t.y for t in instance.targets]
+    max_extent_x = max(max(abs(x) for x in all_xs), 600.0) if all_xs else 600.0
+    max_extent_y = max(max(abs(y) for y in all_ys), 600.0) if all_ys else 600.0
+    aspect_ratio = float(img_h) / float(img_w)
+    scale_margin = 1.32
+    half_w = max(max_extent_x * scale_margin, 850.0)
+    half_h = half_w * aspect_ratio
+    if half_h < max_extent_y * scale_margin:
+        half_h = max_extent_y * scale_margin
+        half_w = half_h / aspect_ratio
+
+    map_x_min, map_x_max = -half_w, half_w
+    map_y_min, map_y_max = -half_h, half_h
+
+    if is_map_active:
+        fig.add_layout_image(
+            dict(
+                source=map_uri,
+                xref="x",
+                yref="y",
+                x=map_x_min,
+                y=map_y_max,
+                sizex=map_x_max - map_x_min,
+                sizey=map_y_max - map_y_min,
+                xanchor="left",
+                yanchor="top",
+                sizing="stretch",
+                opacity=0.95,
+                layer="below",
+            )
+        )
+
     fig.update_layout(
         template="plotly_white",
         paper_bgcolor="#FFFFFF",
-        plot_bgcolor="#F8FAFC",
+        plot_bgcolor="#DDE7E7" if is_map_active else "#F8FAFC",
         xaxis=dict(
-            showgrid=True,
+            showgrid=not is_map_active,
             gridcolor="#E2E8F0",
             zeroline=False,
-            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
+            range=[map_x_min * 0.98, map_x_max * 0.98] if is_map_active else None,
+            tickfont=dict(color="#334155" if is_map_active else "#64748B", size=9, family="JetBrains Mono, monospace"),
         ),
         yaxis=dict(
-            showgrid=True,
+            showgrid=not is_map_active,
             gridcolor="#E2E8F0",
             scaleanchor="x",
             scaleratio=1,
-            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono, monospace"),
+            range=[map_y_min * 0.98, map_y_max * 0.98] if is_map_active else None,
+            tickfont=dict(color="#334155" if is_map_active else "#64748B", size=9, family="JetBrains Mono, monospace"),
         ),
         margin=dict(l=20, r=20, t=15, b=20),
         legend=dict(
@@ -134,7 +177,7 @@ def build_comparison_map(
             bgcolor="rgba(255, 255, 255, 0.95)",
             bordercolor="#E2E8F0",
         ),
-        height=480,
+        height=520,
     )
     return fig
 
@@ -144,6 +187,8 @@ def build_differential_overlay_map(
     aeroscan_schedule: FleetSchedule,
     grasp_schedule: FleetSchedule,
     selected_drone_id: str | None = None,
+    use_tactical_map: bool = True,
+    map_rotation_deg: int = 90,
 ) -> go.Figure:
     """Builds a single-canvas differential comparison overlay showing both algorithms' routes."""
     fig = go.Figure()
@@ -151,6 +196,45 @@ def build_differential_overlay_map(
     depot_ids = {d.launch_depot_id for d in instance.drones} | {
         d.recovery_depot_id for d in instance.drones
     }
+
+    map_meta = get_tactical_map_meta(map_rotation_deg) if use_tactical_map else None
+    map_uri = map_meta[0] if map_meta else None
+    img_w = map_meta[1] if map_meta else 1024
+    img_h = map_meta[2] if map_meta else 738
+    is_map_active = bool(use_tactical_map and map_uri)
+
+    all_xs = [t.x for t in instance.targets]
+    all_ys = [t.y for t in instance.targets]
+    max_extent_x = max(max(abs(x) for x in all_xs), 600.0) if all_xs else 600.0
+    max_extent_y = max(max(abs(y) for y in all_ys), 600.0) if all_ys else 600.0
+    aspect_ratio = float(img_h) / float(img_w)
+    scale_margin = 1.32
+    half_w = max(max_extent_x * scale_margin, 850.0)
+    half_h = half_w * aspect_ratio
+    if half_h < max_extent_y * scale_margin:
+        half_h = max_extent_y * scale_margin
+        half_w = half_h / aspect_ratio
+
+    map_x_min, map_x_max = -half_w, half_w
+    map_y_min, map_y_max = -half_h, half_h
+
+    if is_map_active:
+        fig.add_layout_image(
+            dict(
+                source=map_uri,
+                xref="x",
+                yref="y",
+                x=map_x_min,
+                y=map_y_max,
+                sizex=map_x_max - map_x_min,
+                sizey=map_y_max - map_y_min,
+                xanchor="left",
+                yanchor="top",
+                sizing="stretch",
+                opacity=0.95,
+                layer="below",
+            )
+        )
 
     # Depots
     depots = [node_map[did] for did in depot_ids if did in node_map]
@@ -161,7 +245,7 @@ def build_differential_overlay_map(
                 y=[d.y for d in depots],
                 mode="markers",
                 marker=dict(
-                    size=14, symbol="diamond", color="#0284C7", line=dict(color="#FFFFFF", width=2)
+                    size=14, symbol="diamond", color="#0284C7", line=dict(color="#0F172A" if is_map_active else "#FFFFFF", width=2)
                 ),
                 name="Base Station",
                 hoverinfo="text",
@@ -182,7 +266,7 @@ def build_differential_overlay_map(
                 mode="lines",
                 line=dict(color="#EF4444", width=2, dash="dash"),
                 name=f"GRASP {route.drone_id}",
-                opacity=0.6,
+                opacity=0.75,
                 hoverinfo="text",
                 hovertext=[
                     f"GRASP {route.drone_id} -> {node_map[wp.node_id].name}"
@@ -216,25 +300,27 @@ def build_differential_overlay_map(
     fig.update_layout(
         template="plotly_white",
         paper_bgcolor="#FFFFFF",
-        plot_bgcolor="#F8FAFC",
+        plot_bgcolor="#DDE7E7" if is_map_active else "#F8FAFC",
         xaxis=dict(
             title=dict(
-                text="EASTING X (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono")
+                text="EASTING X (M)", font=dict(color="#334155" if is_map_active else "#64748B", size=10, family="JetBrains Mono")
             ),
-            showgrid=True,
+            showgrid=not is_map_active,
             gridcolor="#E2E8F0",
             zeroline=False,
-            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
+            range=[map_x_min * 0.98, map_x_max * 0.98] if is_map_active else None,
+            tickfont=dict(color="#334155" if is_map_active else "#64748B", size=9, family="JetBrains Mono"),
         ),
         yaxis=dict(
             title=dict(
-                text="NORTHING Y (M)", font=dict(color="#64748B", size=10, family="JetBrains Mono")
+                text="NORTHING Y (M)", font=dict(color="#334155" if is_map_active else "#64748B", size=10, family="JetBrains Mono")
             ),
-            showgrid=True,
+            showgrid=not is_map_active,
             gridcolor="#E2E8F0",
             scaleanchor="x",
             scaleratio=1,
-            tickfont=dict(color="#64748B", size=9, family="JetBrains Mono"),
+            range=[map_y_min * 0.98, map_y_max * 0.98] if is_map_active else None,
+            tickfont=dict(color="#334155" if is_map_active else "#64748B", size=9, family="JetBrains Mono"),
         ),
         margin=dict(l=35, r=20, t=20, b=35),
         legend=dict(

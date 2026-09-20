@@ -73,3 +73,73 @@ def test_streamlit_app_loads():
     for file_path in ui_files:
         compiled = py_compile.compile(file_path, doraise=True)
         assert compiled is not None
+
+
+def test_tactical_map_underlay_generation():
+    """Verify build_mission_map_figure incorporates tactical map image underlay."""
+    from app.visualizer import build_mission_map_figure, get_tactical_map_data_uri
+
+    uri = get_tactical_map_data_uri()
+    assert uri is not None, "Tactical map asset must be present and encoded as base64 data URI"
+    assert uri.startswith("data:image/jpeg;base64,")
+
+    inst = create_mock_instance(num_targets=20, num_drones=3)
+    path = Path("tests/mock_schedule.json")
+    with open(path, "r", encoding="utf-8") as f:
+        schedule = FleetSchedule.from_dict(json.load(f))
+
+    fig = build_mission_map_figure(inst, schedule, use_tactical_map=True)
+    assert fig.layout.images is not None
+    # 1 underlay map + 1 drone SVG icon per fleet UAV (all rendered above the map)
+    underlays = [im for im in fig.layout.images if im.layer == "below"]
+    assert len(underlays) == 1, "exactly one tactical map underlay expected"
+    assert underlays[0].sizing == "stretch"
+    drone_icons = [im for im in fig.layout.images if im.layer == "above"]
+    assert len(drone_icons) == len(inst.drones), (
+        "one drone SVG icon per fleet UAV expected"
+    )
+
+
+def test_drone_svg_icon_geometry_and_rotation():
+    """Verify the quadcopter icon builder emits a valid rotated SVG data URI."""
+    import base64
+
+    from app.visualizer import create_drone_quadcopter_icon
+
+    uri, w, h = create_drone_quadcopter_icon(0.0, 0.0, heading_deg=90.0)
+    assert uri.startswith("data:image/svg+xml;base64,")
+    assert w == h and w > 0
+
+    payload = base64.b64decode(uri.split(",", 1)[1]).decode("utf-8")
+    assert "rotate(90" in payload, "icon must be pre-rotated by compass heading"
+    assert "ellipse" in payload, "quadcopter silhouette must include rotor ellipses"
+
+
+def test_uavs_render_drone_svg_icons_on_map():
+    """Verify every fleet UAV renders exactly one heading-rotated drone SVG icon."""
+    import base64
+
+    from app.visualizer import build_mission_map_figure
+
+    inst = create_mock_instance(num_targets=20, num_drones=3)
+    path = Path("tests/mock_schedule.json")
+    with open(path, "r", encoding="utf-8") as f:
+        schedule = FleetSchedule.from_dict(json.load(f))
+
+    for t in (0.0, 300.0, 1200.0):
+        fig = build_mission_map_figure(inst, schedule, current_time_sec=t)
+        svg_icons = [
+            img.source
+            for img in fig.layout.images
+            if img.source.startswith("data:image/svg+xml;base64,")
+        ]
+        assert len(svg_icons) == 3, (
+            f"expected one quadcopter SVG icon per UAV at t={t}, got {len(svg_icons)}"
+        )
+        rotations = [
+            base64.b64decode(s.split(",", 1)[1]).decode("utf-8") for s in svg_icons
+        ]
+        assert all("rotate(" in p for p in rotations), (
+            "icons must carry live heading rotation"
+        )
+
