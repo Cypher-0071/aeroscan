@@ -34,10 +34,8 @@ export default function App() {
   const handleIntroComplete = useCallback(() => {
     setShowIntro(false);
     setActiveTab('map');
-    // Trigger the drone flying in from top and landing onto the depot
-    setTimeout(() => {
-      setTriggerLandingAnim(true);
-    }, 150);
+    // Trigger the drone flying in from top and landing onto the depot immediately
+    setTriggerLandingAnim(true);
   }, []);
 
   const showToast = (msg) => {
@@ -243,6 +241,7 @@ export default function App() {
               windDir={windDir}
               fleetSize={fleetSize}
               isSolving={isSolving}
+              introActive={showIntro}
               triggerLandingAnim={triggerLandingAnim}
               onLandingAnimDone={() => setTriggerLandingAnim(false)}
             />
