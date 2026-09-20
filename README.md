@@ -37,8 +37,10 @@ The platform solves the **Team Orienteering Problem with Drone Constraints (TOP-
    - QGroundControl `.plan` and MAVLink waypoint exporter.
 
 5. **Benchmark & Validation Suite**:
-   - Chao et al. (1996) benchmark suite (Sets 64, 66, 100, 102).
+   - Manifest-driven Chao et al. (1996) loader with per-instance BKS metadata, provenance, and corpus availability reporting.
+   - Auditable CSV/JSON reports with per-stage latency, honest `N/A` gaps when no authoritative BKS exists, and visible failed rows.
    - Comparative baselines: Organizer GRASP and Genetic Algorithm (GA).
+   - The full 387-instance Chao corpus is **not** redistributed; BKS and latency claims are only reported once the authorized files are present (see [Person 3 handoff](docs/person3_instance_context_handoff.md)).
 
 ---
 
@@ -69,7 +71,7 @@ aeroscan-optima/
 │   └── exporter.py          # QGroundControl .plan & MAVLink CSV exporter
 ├── data/
 │   ├── sample_mission.json  # Mountain SAR scenario
-│   └── chao_instances/      # Benchmark datasets (Sets 64, 66, 100, 102)
+│   └── chao_instances/      # manifest.json + checked-in Chao-format fixture
 ├── tests/                   # Independent unit and integration test suite
 └── docs/                    # System specifications & team collaboration guide
 ```
@@ -103,5 +105,33 @@ uv run streamlit run app/dashboard.py
 
 ### Running Comparative Benchmarks
 ```bash
+# Fast deterministic smoke suite (synthetic fixtures; no corpus required)
 uv run python -m benchmarks.benchmark_runner
+
+# Official manifest/corpus suite (requires the authorized Chao instance files)
+uv run python -m benchmarks.benchmark_runner --full \
+    --output-csv reports/benchmark.csv --output-json reports/benchmark.json
 ```
+
+---
+
+## Mission Ingestion & `InstanceContext`
+
+The platform ingests **JSON**, **GeoJSON**, **CSV** (with a `<stem>.meta.json` mission sidecar),
+and **Chao TOP `.txt`** instances into a validated `InstanceContext`:
+
+```python
+from core.instance import build_instance_context
+
+# Wind override: None -> use file wind; 0.0 -> intentional zero wind
+instance = build_instance_context("data/sample_mission.json", wind_speed_mps=0.0, wind_dir_deg=0.0)
+```
+
+* Coordinates are meters; WGS-84 lat/lon is projected once per mission (CRS and origin recorded).
+* Wind direction uses one convention: the direction the air mass moves **towards**, `0° = +x`/East, counter-clockwise. Meteorological "from" bearings are supplied as `direction_from_degrees` and converted at ingestion.
+* Untrackable arcs (crosswind above airspeed, exact/overwhelming headwind) are marked `np.inf` in **both** cost matrices instead of being clamped to a physically impossible speed.
+* Transit matrices hold transit only; dwell energy is `compute_dwell_energy(...)` and is charged by the route layer.
+* All formats fail with actionable errors naming the file, JSON path/feature index, or CSV row.
+
+Full contract, schemas, fixtures, and benchmark guidance:
+[`docs/person3_instance_context_handoff.md`](docs/person3_instance_context_handoff.md).

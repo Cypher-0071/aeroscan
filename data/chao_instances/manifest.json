@@ -1,0 +1,24 @@
+{
+  "$comment": "Source of truth for benchmark instance discovery and Best Known Solutions (BKS). No BKS value may be derived, interpolated, or fabricated: leave 'bks' null until an authoritative value is recorded with its source and version.",
+  "corpus": {
+    "name": "Chao et al. (1996) Team Orienteering Problem instances",
+    "expected_instances": 387,
+    "source": "Not redistributed with this repository",
+    "version": "unavailable",
+    "note": "Place the authorized instance files under data/chao_instances/ and add one manifest row per instance to enable official, corpus-backed BKS comparisons."
+  },
+  "instances": [
+    {
+      "instance_id": "set_64_1",
+      "set": "set_64",
+      "path": "set_64_1.txt",
+      "nodes": 64,
+      "vehicles": 3,
+      "route_length_budget": 2400.0,
+      "bks": null,
+      "source": "checked-in fixture",
+      "version": "fixture",
+      "synthetic": false
+    }
+  ]
+}

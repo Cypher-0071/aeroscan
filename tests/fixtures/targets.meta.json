@@ -1,0 +1,17 @@
+{
+  "name": "fixture_csv_mission",
+  "ambient_wind": {
+    "speed_mps": 2.5,
+    "direction_degrees": 45.0
+  },
+  "drones": [
+    {
+      "id": "UAV-01",
+      "battery_joules": 360000.0,
+      "max_flight_time_seconds": 2400.0,
+      "cruise_speed_mps": 14.5,
+      "launch_depot_id": 0,
+      "recovery_depot_id": 0
+    }
+  ]
+}

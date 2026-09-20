@@ -78,6 +78,7 @@ class InstanceContext:
     time_matrix: np.ndarray     # Shape: [TotalNodes, TotalNodes], time in seconds (asymmetric)
     energy_matrix: np.ndarray   # Shape: [TotalNodes, TotalNodes], energy in Joules (asymmetric)
     ambient_wind: tuple[float, float] = (0.0, 0.0)  # (speed_mps, direction_rad)
+    metadata: dict[str, Any] = field(default_factory=dict)  # CRS/projection provenance, wind, cruise speed
 
     @property
     def id_to_index(self) -> dict[int, int]:

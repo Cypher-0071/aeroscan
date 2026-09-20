@@ -1,0 +1,35 @@
+{
+  "type": "FeatureCollection",
+  "name": "fixture_wgs84_mission",
+  "ambient_wind": {
+    "speed_mps": 3.0,
+    "direction_from_degrees": 90.0
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-122.4194, 37.7749]},
+      "properties": {"id": 0, "name": "BaseCamp", "priority_score": 0.0, "dwell_time": 0.0}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-122.4194, 37.7759]},
+      "properties": {"id": 1, "name": "North-Target", "priority_score": 60.0, "dwell_time": 30.0}
+    },
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-122.4094, 37.7749]},
+      "properties": {"id": 2, "name": "East-Target", "priority_score": 80.0, "dwell_time": 30.0}
+    }
+  ],
+  "drones": [
+    {
+      "id": "UAV-01",
+      "battery_joules": 360000.0,
+      "max_flight_time_seconds": 2400.0,
+      "cruise_speed_mps": 14.5,
+      "launch_depot_id": 0,
+      "recovery_depot_id": 0
+    }
+  ]
+}

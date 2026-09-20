@@ -1,0 +1,33 @@
+{
+  "name": "fixture_cartesian_mission",
+  "ambient_wind": {
+    "speed_mps": 6.0,
+    "direction_degrees": 0.0
+  },
+  "drones": [
+    {
+      "id": "UAV-01",
+      "battery_joules": 360000.0,
+      "safety_reserve_ratio": 0.15,
+      "max_flight_time_seconds": 2400.0,
+      "cruise_speed_mps": 14.5,
+      "launch_depot_id": 100,
+      "recovery_depot_id": 100
+    },
+    {
+      "id": "UAV-02",
+      "battery_joules": 360000.0,
+      "safety_reserve_ratio": 0.15,
+      "max_flight_time_seconds": 2400.0,
+      "cruise_speed_mps": 14.5,
+      "launch_depot_id": 100,
+      "recovery_depot_id": 100
+    }
+  ],
+  "targets": [
+    {"id": 100, "name": "Depot", "x": 0.0, "y": 0.0, "elevation": 0.0, "priority_score": 0.0, "dwell_time": 0.0},
+    {"id": 205, "name": "East-Target", "x": 500.0, "y": 0.0, "elevation": 30.0, "priority_score": 50.0, "dwell_time": 30.0},
+    {"id": 309, "name": "North-Target", "x": 0.0, "y": 500.0, "elevation": 30.0, "priority_score": 70.0, "dwell_time": 0.0},
+    {"id": 410, "name": "West-Target", "x": -500.0, "y": 0.0, "elevation": 30.0, "priority_score": 40.0, "dwell_time": 45.0}
+  ]
+}
