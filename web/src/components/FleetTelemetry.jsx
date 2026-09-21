@@ -115,10 +115,22 @@ export default function FleetTelemetry({
     ? telemetryList.reduce((sum, t) => sum + (t.battery_percent ?? 100), 0) / telemetryList.length
     : 100;
   const activeCount = telemetryList.filter((t) => t.flight_phase !== 'RECOVERED' && t.flight_phase !== 'STANDBY').length;
+
+  // Total planned distance of full mission
   const totalDistKm = (schedule?.assigned_routes ?? []).reduce(
     (acc, r) => acc + ((r.total_flight_time ?? 0) * 14.5) / 1000,
     0
   );
+
+  // Actual distance covered by fleet up to current missionTime
+  const currentDistKm = useMemo(() => {
+    const routes = schedule?.assigned_routes ?? [];
+    if (routes.length === 0) return 0;
+    return routes.reduce((acc, r) => {
+      const tFlown = Math.min(missionTime, r.total_flight_time ?? 0);
+      return acc + (tFlown * 14.5) / 1000;
+    }, 0);
+  }, [schedule, missionTime]);
 
   // Selected route and waypoints
   const selectedRoute = (schedule?.assigned_routes ?? []).find(
@@ -165,8 +177,38 @@ export default function FleetTelemetry({
     }));
   }, [waypoints, maxTime]);
 
-  const batteryLinePath = useMemo(() => generateSmoothPath(batteryPoints), [batteryPoints]);
-  const batteryAreaPath = useMemo(() => generateAreaPath(batteryPoints, padTop + plotH), [batteryPoints]);
+  // Current Live Scrubber Position
+  const currentX = timeToX(missionTime);
+  const currentSoc = activeDroneTelem.battery_percent ?? 100;
+  const currentAlt = activeDroneTelem.z ?? 60;
+  const currentSocY = socToY(currentSoc);
+  const currentAltY = altToY(currentAlt);
+
+  // Live connecting point on battery chart
+  const currentBatPt = useMemo(() => ({
+    x: currentX,
+    y: currentSocY,
+    t: missionTime,
+    soc: currentSoc,
+  }), [currentX, currentSocY, missionTime, currentSoc]);
+
+  // Split battery trajectory: Flown Telemetry (<= missionTime) vs Planned Ahead (> missionTime)
+  const { pastBatteryPoints, futureBatteryPoints } = useMemo(() => {
+    if (batteryPoints.length === 0) {
+      return { pastBatteryPoints: [], futureBatteryPoints: [] };
+    }
+    const past = batteryPoints.filter((p) => p.t <= missionTime);
+    const future = batteryPoints.filter((p) => p.t > missionTime);
+
+    const fullPast = [...past, currentBatPt];
+    const fullFuture = [currentBatPt, ...future];
+
+    return { pastBatteryPoints: fullPast, futureBatteryPoints: fullFuture };
+  }, [batteryPoints, missionTime, currentBatPt]);
+
+  const pastBatteryLinePath = useMemo(() => generateSmoothPath(pastBatteryPoints), [pastBatteryPoints]);
+  const pastBatteryAreaPath = useMemo(() => generateAreaPath(pastBatteryPoints, padTop + plotH), [pastBatteryPoints]);
+  const futureBatteryLinePath = useMemo(() => generateSmoothPath(futureBatteryPoints), [futureBatteryPoints]);
 
   // Realistic aerodynamic altitude profile
   const altPoints = useMemo(() => {
@@ -209,15 +251,31 @@ export default function FleetTelemetry({
     }));
   }, [waypoints, maxTime]);
 
-  const altLinePath = useMemo(() => generateSmoothPath(altPoints), [altPoints]);
-  const altAreaPath = useMemo(() => generateAreaPath(altPoints, padTop + plotH), [altPoints]);
+  // Live connecting point on altitude chart
+  const currentAltPt = useMemo(() => ({
+    x: currentX,
+    y: currentAltY,
+    t: missionTime,
+    alt: currentAlt,
+  }), [currentX, currentAltY, missionTime, currentAlt]);
 
-  // Current Live Scrubber Position
-  const currentX = timeToX(missionTime);
-  const currentSoc = activeDroneTelem.battery_percent ?? 100;
-  const currentAlt = activeDroneTelem.z ?? 60;
-  const currentSocY = socToY(currentSoc);
-  const currentAltY = altToY(currentAlt);
+  // Split altitude trajectory: Flown vs Planned Ahead
+  const { pastAltPoints, futureAltPoints } = useMemo(() => {
+    if (altPoints.length === 0) {
+      return { pastAltPoints: [], futureAltPoints: [] };
+    }
+    const past = altPoints.filter((p) => p.t <= missionTime);
+    const future = altPoints.filter((p) => p.t > missionTime);
+
+    const fullPast = [...past, currentAltPt];
+    const fullFuture = [currentAltPt, ...future];
+
+    return { pastAltPoints: fullPast, futureAltPoints: fullFuture };
+  }, [altPoints, missionTime, currentAltPt]);
+
+  const pastAltLinePath = useMemo(() => generateSmoothPath(pastAltPoints), [pastAltPoints]);
+  const pastAltAreaPath = useMemo(() => generateAreaPath(pastAltPoints, padTop + plotH), [pastAltPoints]);
+  const futureAltLinePath = useMemo(() => generateSmoothPath(futureAltPoints), [futureAltPoints]);
 
   // Time grid ticks (5 intervals)
   const timeTicks = useMemo(() => {
@@ -308,8 +366,10 @@ export default function FleetTelemetry({
             </span>
           </div>
           <div className="px-3 py-1.5 rounded-xl bg-white/70 border border-slate-200/80 shadow-xs flex items-center gap-2">
-            <span className="text-slate-400">Distance:</span>
-            <span className="font-mono font-semibold text-sky-700">{totalDistKm.toFixed(1)} km</span>
+            <span className="text-slate-400">Flown / Plan:</span>
+            <span className="font-mono font-semibold text-sky-700">
+              {currentDistKm.toFixed(1)} <span className="text-slate-400 font-normal">/ {totalDistKm.toFixed(1)} km</span>
+            </span>
           </div>
           <div className="px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-200/80 shadow-xs flex items-center gap-2 text-sky-800">
             <Clock className="w-3.5 h-3.5 text-sky-600" />
@@ -400,21 +460,33 @@ export default function FleetTelemetry({
                 </div>
                 <div>
                   <h2 className="text-xs font-semibold text-slate-900 tracking-tight">Battery State of Charge (%)</h2>
-                  <span className="text-[11px] text-slate-400 font-mono">Telemetry Profile: {selectedDroneId}</span>
+                  <div className="flex items-center gap-3 text-[10px] text-slate-500 font-sans mt-0.5">
+                    <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700">
+                      <span className="w-2.5 h-1 bg-emerald-500 rounded-full" />
+                      Flown Telemetry (0s → T+{missionTime.toFixed(0)}s)
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 font-medium text-sky-700">
+                      <span className="w-2.5 h-0.5 border-t-2 border-dashed border-sky-500" />
+                      Planned Trajectory Ahead
+                    </span>
+                  </div>
                 </div>
               </div>
 
               <div className="flex items-center gap-2 text-xs font-mono">
                 <div className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/80 text-emerald-800 font-bold">
-                  {currentSoc.toFixed(1)}% SoC
+                  Current: {currentSoc.toFixed(1)}% SoC
                 </div>
                 <div className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-600 font-medium">
-                  Reserve: {(selectedRoute?.final_reserve_percent ?? 100).toFixed(1)}%
+                  Burned: {(100 - currentSoc).toFixed(1)}%
+                </div>
+                <div className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-600 font-medium" title="Projected reserve upon return to depot">
+                  Est. Landing: {(selectedRoute?.final_reserve_percent ?? 100).toFixed(1)}%
                 </div>
                 {(selectedRoute?.final_reserve_percent ?? 100) >= 15 ? (
                   <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-sans font-medium px-2 py-0.5 rounded-md bg-emerald-50/80 border border-emerald-200/60">
                     <CheckCircle2 className="w-3 h-3" />
-                    Floor Met
+                    Floor Safe
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 text-[10px] text-rose-600 font-sans font-medium px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200">
@@ -425,7 +497,7 @@ export default function FleetTelemetry({
               </div>
             </div>
 
-            {/* SVG Visualizer with smooth cubic curves and interactive scrubber */}
+            {/* SVG Visualizer with Flown Telemetry vs Planned Trajectory */}
             <div
               className="h-56 w-full bg-gradient-to-b from-white to-slate-50/50 rounded-xl p-2 border border-slate-200/80 shadow-inner relative cursor-crosshair select-none"
               onClick={handleChartClick}
@@ -434,18 +506,17 @@ export default function FleetTelemetry({
             >
               <svg className="w-full h-full" viewBox={`0 0 ${chartW} ${chartH}`} preserveAspectRatio="none">
                 <defs>
-                  {/* Battery area gradient */}
+                  {/* Battery area gradient for flown portion */}
                   <linearGradient id="batteryAreaGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
-                    <stop offset="70%" stopColor="#0284c7" stopOpacity="0.08" />
-                    <stop offset="100%" stopColor="#0284c7" stopOpacity="0.01" />
+                    <stop offset="70%" stopColor="#059669" stopOpacity="0.08" />
+                    <stop offset="100%" stopColor="#059669" stopOpacity="0.01" />
                   </linearGradient>
 
                   {/* Battery line stroke gradient */}
                   <linearGradient id="batteryLineGrad" x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor="#059669" />
-                    <stop offset="80%" stopColor="#0284c7" />
-                    <stop offset="100%" stopColor="#6366f1" />
+                    <stop offset="100%" stopColor="#10b981" />
                   </linearGradient>
 
                   {/* Safety floor danger zone gradient */}
@@ -456,7 +527,7 @@ export default function FleetTelemetry({
 
                   {/* Soft curve glow */}
                   <filter id="curveGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#10b981" floodOpacity="0.3" />
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#10b981" floodOpacity="0.35" />
                   </filter>
                 </defs>
 
@@ -553,49 +624,65 @@ export default function FleetTelemetry({
                   </g>
                 ))}
 
-                {/* Smooth Area Under Curve */}
-                {batteryAreaPath && (
-                  <path d={batteryAreaPath} fill="url(#batteryAreaGrad)" />
+                {/* 1. Flown Area Under Curve (Up to missionTime) */}
+                {pastBatteryAreaPath && (
+                  <path d={pastBatteryAreaPath} fill="url(#batteryAreaGrad)" />
                 )}
 
-                {/* Smooth Main Discharge Spline */}
-                {batteryLinePath && (
+                {/* 2. Planned Trajectory Path Ahead (Dashed Sky Line) */}
+                {futureBatteryLinePath && (
                   <path
-                    d={batteryLinePath}
+                    d={futureBatteryLinePath}
+                    fill="none"
+                    stroke="#0284c7"
+                    strokeWidth="2"
+                    strokeDasharray="5 3"
+                    strokeOpacity="0.75"
+                  />
+                )}
+
+                {/* 3. Actual Flown Telemetry Path (Solid Vibrant Emerald Spline) */}
+                {pastBatteryLinePath && (
+                  <path
+                    d={pastBatteryLinePath}
                     fill="none"
                     stroke="url(#batteryLineGrad)"
-                    strokeWidth="2.8"
+                    strokeWidth="3.2"
                     strokeLinecap="round"
                     filter="url(#curveGlow)"
                   />
                 )}
 
                 {/* Waypoint Nodes on Curve */}
-                {batteryPoints.map((pt, idx) => (
-                  <g key={idx}>
-                    <circle
-                      cx={pt.x}
-                      cy={pt.y}
-                      r="3.5"
-                      fill="#ffffff"
-                      stroke="#059669"
-                      strokeWidth="2"
-                    />
-                    {pt.node_id !== undefined && pt.node_id !== 0 && (
-                      <text
-                        x={pt.x}
-                        y={Math.max(padTop + 10, pt.y - 7)}
-                        textAnchor="middle"
-                        fontSize="8"
-                        fill="#0369a1"
-                        fontFamily="ui-monospace, monospace"
-                        fontWeight="600"
-                      >
-                        T-{pt.node_id}
-                      </text>
-                    )}
-                  </g>
-                ))}
+                {batteryPoints.map((pt, idx) => {
+                  const isScouted = pt.t <= missionTime;
+                  return (
+                    <g key={idx}>
+                      <circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r={isScouted ? '3.5' : '3'}
+                        fill={isScouted ? '#059669' : '#ffffff'}
+                        stroke={isScouted ? '#ffffff' : '#0284c7'}
+                        strokeWidth={isScouted ? '2' : '1.5'}
+                        strokeDasharray={isScouted ? '0' : '2 2'}
+                      />
+                      {pt.node_id !== undefined && pt.node_id !== 0 && (
+                        <text
+                          x={pt.x}
+                          y={Math.max(padTop + 10, pt.y - 7)}
+                          textAnchor="middle"
+                          fontSize="8"
+                          fill={isScouted ? '#059669' : '#0369a1'}
+                          fontFamily="ui-monospace, monospace"
+                          fontWeight="600"
+                        >
+                          {isScouted ? `✓ T-${pt.node_id}` : `T-${pt.node_id}`}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
 
                 {/* Live Current Time Scrubber Line */}
                 <line
@@ -692,7 +779,16 @@ export default function FleetTelemetry({
                 </div>
                 <div>
                   <h2 className="text-xs font-semibold text-slate-900 tracking-tight">Flight Altitude Profile (m AGL)</h2>
-                  <span className="text-[11px] text-slate-400 font-mono">Vertical Envelope & Terrain Clearance</span>
+                  <div className="flex items-center gap-3 text-[10px] text-slate-500 font-sans mt-0.5">
+                    <span className="inline-flex items-center gap-1.5 font-medium text-sky-700">
+                      <span className="w-2.5 h-1 bg-sky-600 rounded-full" />
+                      Flown Altitude
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 font-medium text-slate-500">
+                      <span className="w-2.5 h-0.5 border-t-2 border-dashed border-sky-400" />
+                      Planned Flight Envelope
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -719,8 +815,7 @@ export default function FleetTelemetry({
 
                   <linearGradient id="altLineGrad" x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stopColor="#0284c7" />
-                    <stop offset="50%" stopColor="#38bdf8" />
-                    <stop offset="100%" stopColor="#0284c7" />
+                    <stop offset="100%" stopColor="#38bdf8" />
                   </linearGradient>
                 </defs>
 
@@ -788,48 +883,64 @@ export default function FleetTelemetry({
                   </g>
                 ))}
 
-                {/* Filled Altitude Area */}
-                {altAreaPath && (
-                  <path d={altAreaPath} fill="url(#altAreaGrad)" />
+                {/* Filled Altitude Area for flown portion */}
+                {pastAltAreaPath && (
+                  <path d={pastAltAreaPath} fill="url(#altAreaGrad)" />
                 )}
 
-                {/* Smooth Altitude Vector Profile */}
-                {altLinePath && (
+                {/* Planned Altitude Ahead (Dashed) */}
+                {futureAltLinePath && (
                   <path
-                    d={altLinePath}
+                    d={futureAltLinePath}
+                    fill="none"
+                    stroke="#0284c7"
+                    strokeWidth="1.8"
+                    strokeDasharray="4 3"
+                    strokeOpacity="0.7"
+                  />
+                )}
+
+                {/* Flown Altitude Vector (Solid) */}
+                {pastAltLinePath && (
+                  <path
+                    d={pastAltLinePath}
                     fill="none"
                     stroke="url(#altLineGrad)"
-                    strokeWidth="2.5"
+                    strokeWidth="2.8"
                     strokeLinecap="round"
                   />
                 )}
 
                 {/* Altitude Waypoints */}
-                {altPoints.map((pt, idx) => (
-                  <g key={idx}>
-                    <circle
-                      cx={pt.x}
-                      cy={pt.y}
-                      r="3"
-                      fill="#ffffff"
-                      stroke="#0284c7"
-                      strokeWidth="1.8"
-                    />
-                    {pt.label && pt.alt > 0 && (
-                      <text
-                        x={pt.x}
-                        y={pt.y - 7}
-                        textAnchor="middle"
-                        fontSize="7.5"
-                        fill="#0369a1"
-                        fontFamily="ui-monospace, monospace"
-                        fontWeight="600"
-                      >
-                        {pt.label}
-                      </text>
-                    )}
-                  </g>
-                ))}
+                {altPoints.map((pt, idx) => {
+                  const isScouted = pt.t <= missionTime;
+                  return (
+                    <g key={idx}>
+                      <circle
+                        cx={pt.x}
+                        cy={pt.y}
+                        r="3"
+                        fill={isScouted ? '#0284c7' : '#ffffff'}
+                        stroke="#0284c7"
+                        strokeWidth="1.8"
+                        strokeDasharray={isScouted ? '0' : '2 2'}
+                      />
+                      {pt.label && pt.alt > 0 && (
+                        <text
+                          x={pt.x}
+                          y={pt.y - 7}
+                          textAnchor="middle"
+                          fontSize="7.5"
+                          fill={isScouted ? '#0284c7' : '#64748b'}
+                          fontFamily="ui-monospace, monospace"
+                          fontWeight="600"
+                        >
+                          {pt.label}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
 
                 {/* Live Current Time Scrubber Line */}
                 <line
@@ -948,7 +1059,7 @@ export default function FleetTelemetry({
             </div>
           </div>
 
-          {/* Sortie Route Progression (Replaces verbose table with actionable sequence) */}
+          {/* Sortie Route Progression (Distinguishes Secured vs En Route vs Planned) */}
           <div className="glass-card rounded-2xl p-4 space-y-3 border border-slate-200/80 shadow-sm">
             <div className="flex items-center justify-between border-b border-slate-200/70 pb-2">
               <span className="text-xs font-semibold text-slate-900">Sortie Waypoint Sequence</span>
@@ -968,30 +1079,41 @@ export default function FleetTelemetry({
                     key={idx}
                     className={`flex items-center justify-between p-2 rounded-xl border text-xs transition-all ${
                       isCurrent
-                        ? 'bg-sky-50 border-sky-300 shadow-2xs text-sky-900'
+                        ? 'bg-sky-50 border-sky-300 shadow-2xs text-sky-900 ring-1 ring-sky-200'
                         : isPassed
-                          ? 'bg-white/50 border-slate-200/60 text-slate-500'
-                          : 'bg-white/80 border-slate-200/80 text-slate-700'
+                          ? 'bg-emerald-50/40 border-emerald-200/60 text-slate-700'
+                          : 'bg-white/60 border-slate-200/60 text-slate-400'
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
                         isPassed
-                          ? 'bg-emerald-100 text-emerald-700'
+                          ? 'bg-emerald-500 text-white'
                           : isCurrent
                             ? 'bg-sky-600 text-white animate-pulse'
-                            : 'bg-slate-100 text-slate-500'
+                            : 'bg-slate-100 text-slate-400 border border-slate-200'
                       }`}>
-                        {idx + 1}
+                        {isPassed ? '✓' : idx + 1}
                       </div>
-                      <span className="font-semibold">{label}</span>
+                      <div>
+                        <span className="font-semibold block text-slate-800">{label}</span>
+                        <span className="text-[10px] text-slate-400 font-sans block">
+                          {isPassed ? 'Secured' : isCurrent ? 'Active Recon' : 'Planned Target'}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2 font-mono text-[11px]">
-                      <span className="text-slate-400">T+{wp.departure_time.toFixed(0)}s</span>
-                      <span className={`font-semibold ${wp.remaining_battery_percent >= 15 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {wp.remaining_battery_percent.toFixed(0)}%
-                      </span>
+                    <div className="text-right font-mono text-[11px]">
+                      <div className="text-slate-500">T+{wp.departure_time.toFixed(0)}s</div>
+                      <div className={`font-semibold text-[10px] ${
+                        isPassed 
+                          ? 'text-emerald-600' 
+                          : isCurrent 
+                            ? 'text-sky-700' 
+                            : 'text-slate-400'
+                      }`}>
+                        {isPassed ? `SoC: ${wp.remaining_battery_percent.toFixed(0)}%` : `Est: ${wp.remaining_battery_percent.toFixed(0)}%`}
+                      </div>
                     </div>
                   </div>
                 );

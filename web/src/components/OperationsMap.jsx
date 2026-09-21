@@ -1217,6 +1217,20 @@ export default function OperationsMap({
     100
   );
 
+  // Dynamic live stats at current missionTime (progress so far)
+  const currentSecuredReward = useMemo(() => {
+    if (!securedTargets || securedTargets.length === 0) return 0;
+    const targetMap = new Map((instance?.targets ?? []).map((t) => [t.id, t.priority_score ?? 0]));
+    return securedTargets.reduce((sum, id) => sum + (targetMap.get(id) ?? 0), 0);
+  }, [securedTargets, instance]);
+
+  const currentMinBattery = useMemo(() => {
+    if (!telemetry || telemetry.length === 0) return 100;
+    return Math.min(...telemetry.map((t) => t.battery_percent ?? 100));
+  }, [telemetry]);
+
+  const totalPlannedReward = schedule?.cumulative_reward ?? 0;
+
   return (
     <div className="space-y-4 font-sans">
       {/* 1. Slim Top Bar: Map Title & Layer Toggles */}
@@ -1393,17 +1407,17 @@ export default function OperationsMap({
         </div>
       </div>
 
-      {/* 3. Streamlined Metric Strip */}
+      {/* 3. Streamlined Metric Strip (Live Progress at Current Mission Time) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="glass-card rounded-xl p-3 space-y-0.5">
-          <div className="text-[11px] text-slate-500 font-medium">Total Secured Reward</div>
+          <div className="text-[11px] text-slate-500 font-medium">Secured Reward (Current)</div>
           <div className="text-xl font-mono font-bold text-slate-900">
-            {schedule?.cumulative_reward?.toFixed(0) ?? '0'} <span className="text-xs font-sans text-slate-400 font-normal">PTS</span>
+            {currentSecuredReward.toFixed(0)} <span className="text-xs font-sans text-slate-400 font-normal">/ {totalPlannedReward.toFixed(0)} PTS</span>
           </div>
           <div className="text-[11px] text-emerald-600 font-medium">
-            {(schedule?.cumulative_reward ?? 0) > 0
-              ? `+${(schedule?.reward_gain_percent ?? 18.5).toFixed(1)}% vs baseline`
-              : 'Optimized swarm route'}
+            {totalPlannedReward > 0
+              ? `${((currentSecuredReward / totalPlannedReward) * 100).toFixed(1)}% scouted so far`
+              : 'Mission in progress'}
           </div>
         </div>
 
@@ -1413,17 +1427,17 @@ export default function OperationsMap({
             {visitedCount} <span className="text-xs font-sans text-slate-400 font-normal">/ {totalTargetsCount}</span>
           </div>
           <div className="text-[11px] text-sky-600 font-medium">
-            {coveragePct.toFixed(1)}% coverage
+            {coveragePct.toFixed(1)}% coverage scouted
           </div>
         </div>
 
         <div className="glass-card rounded-xl p-3 space-y-0.5">
-          <div className="text-[11px] text-slate-500 font-medium">Min Battery Reserve</div>
+          <div className="text-[11px] text-slate-500 font-medium">Current Fleet Battery</div>
           <div className="text-xl font-mono font-bold text-emerald-600">
-            {minReserveAll.toFixed(1)}%
+            {currentMinBattery.toFixed(1)}%
           </div>
-          <div className="text-[11px] text-slate-400">
-            15% safety floor verified
+          <div className="text-[11px] text-slate-500 font-sans">
+            Est. Final: <strong className="text-slate-700 font-mono">{minReserveAll.toFixed(1)}%</strong> reserve
           </div>
         </div>
 
