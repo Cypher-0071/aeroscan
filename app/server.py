@@ -142,12 +142,18 @@ def solve():
     # Ingest and project instance
     instance = load_instance(scenario_name, fleet_size, wind_speed, wind_dir)
 
-    # Solve Tier 1 (ALNS) & Tier 2 (CP-SAT)
+    # Solve Tier 1 (ALNS) & Tier 2 (CP-SAT) — lightning fast matheuristic (~0.5s)
     pool = explore_route_pool(instance, max_iterations=max_iterations, time_limit_sec=time_limit_sec)
-    schedule = solve_fleet_schedule(instance, pool, run_baselines=True)
+    schedule = solve_fleet_schedule(instance, pool, run_baselines=False)
 
-    # Baseline comparison
+    # Baseline comparison (GRASP baseline takes < 0.05s)
     grasp_schedule = solve_grasp_baseline(instance)
+    schedule.baseline_grasp_reward = grasp_schedule.cumulative_reward
+    if grasp_schedule.cumulative_reward > 0:
+        schedule.reward_gain_percent = (
+            (schedule.cumulative_reward - grasp_schedule.cumulative_reward)
+            / grasp_schedule.cumulative_reward
+        ) * 100.0
 
     # Compute initial telemetry state at t = 0
     init_telem, secured = get_fleet_telemetry_at_time(schedule, 0.0, instance)

@@ -299,6 +299,9 @@ export default function OperationsMap({
   onLandingAnimDone,
   isSolving,
   introActive,
+  missionPhase = 'optimized',
+  onReplayIngress,
+  onRunOptimizer,
 }) {
   const activeWindSpd = propWindSpeed ?? instance?.ambient_wind?.speed_mps ?? 3.5;
   const activeWindDir = propWindDir ?? instance?.ambient_wind?.direction_deg ?? 45;
@@ -336,12 +339,12 @@ export default function OperationsMap({
 
     let animId;
     const startTime = performance.now();
-    const duration = 2400; // 2.4s total: 1.6s descent + 0.8s touchdown shockwave & badge
+    const duration = 2000; // 2.0s clean descent onto depot apron pads
 
     const loop = (now) => {
       const elapsed = now - startTime;
       const progress = Math.min(1.0, elapsed / duration);
-      const phase = progress < 0.65 ? 'descending' : progress < 0.95 ? 'touchdown' : 'done';
+      const phase = progress < 0.75 ? 'descending' : progress < 0.98 ? 'touchdown' : 'done';
 
       setLandingState({ progress, phase });
 
@@ -349,16 +352,14 @@ export default function OperationsMap({
         animId = requestAnimationFrame(loop);
       } else {
         setHasLanded(true);
-        setTimeout(() => {
-          setLandingState(null);
-          if (onLandingAnimDone) onLandingAnimDone();
-        }, 800);
+        setLandingState(null);
+        if (onLandingAnimDone) onLandingAnimDone();
       }
     };
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [triggerLandingAnim, onLandingAnimDone]);
+  }, [triggerLandingAnim, onLandingAnimDone, introActive]);
 
   // Ensure drones NEVER show up early while intro is active
   useEffect(() => {
@@ -380,8 +381,9 @@ export default function OperationsMap({
       lastTime = now;
 
       setMissionTime((prevTime) => {
-        // 1x baseline calibrated to previous 5x speed (5 mission-sec per real second)
-        const nextTime = prevTime + dt * playbackSpeed * 5;
+        // Base simulation scale of 10x ensures 1x speed is smooth, energetic, and completes in ~60s
+        const simScale = 10;
+        const nextTime = prevTime + dt * playbackSpeed * simScale;
         if (nextTime >= maxMissionTime) {
           setIsPlaying(false);
           return maxMissionTime;
@@ -396,23 +398,32 @@ export default function OperationsMap({
     return () => cancelAnimationFrame(animId);
   }, [isPlaying, playbackSpeed, maxMissionTime, setIsPlaying, setMissionTime]);
 
-  // Progressive reveal for paths and targets (avoids rapid flashing)
-  const [revealProgress, setRevealProgress] = useState(1.0);
+  // Determining path-finding and final corridor display states
+  const isFindingPath = (isSolving || missionPhase === 'optimizing') && !landingState && !triggerLandingAnim && hasLanded;
+  const shouldShowFinalPaths = showFlightPaths && !isFindingPath && (hasLanded || missionPhase === 'optimized') && !landingState && !triggerLandingAnim;
+
+  // Progressive path drawing reveal (triggers once optimization finishes and paths should show)
+  const [revealProgress, setRevealProgress] = useState(shouldShowFinalPaths ? 1.0 : 0.0);
   useEffect(() => {
-    if (isSolving) {
-      setRevealProgress(0.15);
-    } else {
-      let start = performance.now();
-      let animId;
-      const animate = (now) => {
-        const t = Math.min(1.0, (now - start) / 600);
-        setRevealProgress(t);
-        if (t < 1.0) animId = requestAnimationFrame(animate);
-      };
-      animId = requestAnimationFrame(animate);
-      return () => cancelAnimationFrame(animId);
+    if (!shouldShowFinalPaths) {
+      setRevealProgress(0.0);
+      return;
     }
-  }, [isSolving, schedule]);
+
+    let start = performance.now();
+    let animId;
+    const duration = 1100; // 1.1s smooth path drawing
+    const animate = (now) => {
+      const t = Math.min(1.0, (now - start) / duration);
+      const ease = 1 - Math.pow(1 - t, 3);
+      setRevealProgress(ease);
+      if (t < 1.0) {
+        animId = requestAnimationFrame(animate);
+      }
+    };
+    animId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animId);
+  }, [shouldShowFinalPaths, schedule]);
 
   // Derived coordinate bounds
   const targets = instance?.targets ?? [];
@@ -647,9 +658,13 @@ export default function OperationsMap({
     ctx.fillText('BASE OPS', depotX + 16, depotY + 9.5);
     ctx.restore();
 
-    // 4. Planned Flight Corridors (Multi-Layered Vector Channels with Aerodynamic Flow)
-    const routes = schedule?.assigned_routes ?? [];
-    if (showFlightPaths) {
+    // 4. Planned Flight Corridors or Real-Time Path-Finding
+    const shouldShowFinalPaths = showFlightPaths && !isFindingPath && (hasLanded || missionPhase === 'optimized') && !landingState && !triggerLandingAnim;
+    const probedTargetIds = new Set();
+
+    // 4A. Finalized Optimal Corridors (Progressively drawn outward from depot)
+    if (shouldShowFinalPaths && revealProgress > 0.01) {
+      const routes = schedule?.assigned_routes ?? [];
       const totalFleet = Math.max(1, activeFleetSize);
 
       routes.forEach((route, rIdx) => {
@@ -678,19 +693,57 @@ export default function OperationsMap({
 
         if (pts.length < 2) return;
 
+        // Progressive reveal: draw path outward along waypoints from depot
+        let drawnPts = pts;
+        let leadingTip = null;
+
+        if (revealProgress < 0.999) {
+          let totalDist = 0;
+          const segLens = [];
+          for (let i = 0; i < pts.length - 1; i++) {
+            const d = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+            segLens.push(d);
+            totalDist += d;
+          }
+
+          const targetDist = totalDist * revealProgress;
+          let accumDist = 0;
+          drawnPts = [pts[0]];
+
+          for (let i = 0; i < segLens.length; i++) {
+            const sl = segLens[i];
+            if (accumDist + sl <= targetDist) {
+              drawnPts.push(pts[i + 1]);
+              accumDist += sl;
+            } else {
+              const remain = targetDist - accumDist;
+              const ratio = sl > 0 ? remain / sl : 0;
+              const tipPt = {
+                x: pts[i].x + (pts[i + 1].x - pts[i].x) * ratio,
+                y: pts[i].y + (pts[i + 1].y - pts[i].y) * ratio,
+              };
+              drawnPts.push(tipPt);
+              leadingTip = tipPt;
+              break;
+            }
+          }
+        }
+
+        if (drawnPts.length < 2) return;
+
         ctx.save();
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        const alpha = Math.min(1.0, 0.25 + revealProgress * 0.75);
+        const alpha = Math.min(1.0, 0.35 + revealProgress * 0.65);
 
         // Aerodynamic corner filleting for smooth bank turns
         const traceCorridor = (filletR = 10) => {
           ctx.beginPath();
-          ctx.moveTo(pts[0].x, pts[0].y);
-          for (let i = 1; i < pts.length - 1; i++) {
-            const pPrev = pts[i - 1];
-            const pCur = pts[i];
-            const pNext = pts[i + 1];
+          ctx.moveTo(drawnPts[0].x, drawnPts[0].y);
+          for (let i = 1; i < drawnPts.length - 1; i++) {
+            const pPrev = drawnPts[i - 1];
+            const pCur = drawnPts[i];
+            const pNext = drawnPts[i + 1];
             const dPrev = Math.hypot(pCur.x - pPrev.x, pCur.y - pPrev.y);
             const dNext = Math.hypot(pNext.x - pCur.x, pNext.y - pCur.y);
             const r = Math.min(filletR, dPrev / 2.2, dNext / 2.2);
@@ -700,7 +753,7 @@ export default function OperationsMap({
               ctx.lineTo(pCur.x, pCur.y);
             }
           }
-          ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+          ctx.lineTo(drawnPts[drawnPts.length - 1].x, drawnPts[drawnPts.length - 1].y);
         };
 
         // Layer 1: Wide Translucent Flight Corridor Buffer (adds realistic depth)
@@ -726,48 +779,187 @@ export default function OperationsMap({
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Layer 4: Sleek Aerodynamic Directional Chevrons along flight corridors
-        for (let i = 0; i < pts.length - 1; i++) {
-          const p1 = pts[i];
-          const p2 = pts[i + 1];
-          const segDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-          if (segDist > 55) {
-            const midX = (p1.x + p2.x) / 2;
-            const midY = (p1.y + p2.y) / 2;
-            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+        // Layer 4: Sleek Aerodynamic Directional Chevrons along flight corridors (when fully established)
+        if (revealProgress > 0.95) {
+          for (let i = 0; i < drawnPts.length - 1; i++) {
+            const p1 = drawnPts[i];
+            const p2 = drawnPts[i + 1];
+            const segDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+            if (segDist > 55) {
+              const midX = (p1.x + p2.x) / 2;
+              const midY = (p1.y + p2.y) / 2;
+              const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
 
-            ctx.save();
-            ctx.translate(midX, midY);
-            ctx.rotate(angle);
-            ctx.beginPath();
-            ctx.moveTo(-3, -2.8);
-            ctx.lineTo(1.8, 0);
-            ctx.lineTo(-3, 2.8);
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1.6;
-            ctx.stroke();
-            ctx.restore();
+              ctx.save();
+              ctx.translate(midX, midY);
+              ctx.rotate(angle);
+              ctx.beginPath();
+              ctx.moveTo(-3, -2.8);
+              ctx.lineTo(1.8, 0);
+              ctx.lineTo(-3, 2.8);
+              ctx.strokeStyle = '#ffffff';
+              ctx.lineWidth = 1.6;
+              ctx.stroke();
+              ctx.restore();
+            }
           }
+        }
+
+        // Layer 5: Luminous leading vector tip while path is drawing in
+        if (leadingTip && revealProgress < 0.99) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(leadingTip.x, leadingTip.y, 5, 0, Math.PI * 2);
+          ctx.fillStyle = color;
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 10;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(leadingTip.x, leadingTip.y, 2.2, 0, Math.PI * 2);
+          ctx.fillStyle = '#ffffff';
+          ctx.fill();
+          ctx.restore();
         }
 
         ctx.restore();
       });
     }
 
-    // 5. Target Nodes: Aerospace Tactical Contacts & Priority Hierarchy
+    // 4B. Real-Time Aerospace Path-Finding Sequence ("till not optimized it should look like drones are finding best path")
+    if (isFindingPath) {
+      const nonDepotTargets = targets.filter((t) => !(instance?.depot_ids ?? [0]).includes(t.id));
+      const totalFleet = Math.max(1, activeFleetSize);
+
+      if (nonDepotTargets.length > 0) {
+        // Sector distribution around depot
+        const depotCenter = { x: depotX, y: depotY };
+        const angleSectors = nonDepotTargets.map((t) => {
+          const tx = toCanvasX(t.x, width);
+          const ty = toCanvasY(t.y, height);
+          return {
+            target: t,
+            cx: tx,
+            cy: ty,
+            angle: Math.atan2(ty - depotCenter.y, tx - depotCenter.x),
+          };
+        });
+        angleSectors.sort((a, b) => a.angle - b.angle);
+
+        const clusterSize = Math.max(3, Math.floor(angleSectors.length / totalFleet));
+
+        for (let dIdx = 0; dIdx < totalFleet; dIdx++) {
+          const color = DRONE_COLORS[dIdx % DRONE_COLORS.length];
+          const apronPos = getApronParkPosition(dIdx, totalFleet, depotX, depotY);
+
+          // Sector range for this UAV
+          const startIdx = (dIdx * clusterSize) % angleSectors.length;
+          const sectorSlice = angleSectors.slice(startIdx, startIdx + clusterSize);
+          if (sectorSlice.length < 2) continue;
+
+          // 1. Radar sector scan sweep from drone's apron position
+          const sweepAngle = (timeSec * 2.4 + dIdx * 2.0) % (Math.PI * 2);
+          const sweepDist = 175 + 35 * Math.sin(timeSec * 4 + dIdx);
+          ctx.save();
+          const sweepGrad = ctx.createRadialGradient(
+            apronPos.x, apronPos.y, 8,
+            apronPos.x, apronPos.y, sweepDist
+          );
+          sweepGrad.addColorStop(0, `${color}30`);
+          sweepGrad.addColorStop(1, 'transparent');
+          ctx.fillStyle = sweepGrad;
+          ctx.beginPath();
+          ctx.moveTo(apronPos.x, apronPos.y);
+          ctx.arc(apronPos.x, apronPos.y, sweepDist, sweepAngle - 0.38, sweepAngle + 0.38);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+
+          // 2. High-speed exploratory candidate routes searching best path
+          const timeOffset = timeSec * 4.5 + dIdx * 2.8;
+          const shift = Math.floor(timeOffset) % sectorSlice.length;
+
+          const candNodes = [];
+          const candCount = Math.min(6, sectorSlice.length);
+          for (let i = 0; i < candCount; i++) {
+            const item = sectorSlice[(shift + i * 2) % sectorSlice.length];
+            candNodes.push(item);
+            probedTargetIds.add(item.target.id);
+          }
+
+          const candPoints = [apronPos];
+          candNodes.forEach((item) => {
+            candPoints.push({ x: item.cx, y: item.cy, id: item.target.id });
+          });
+          candPoints.push(apronPos);
+
+          // Draw active exploratory corridor searching for optimal path
+          ctx.save();
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          // Outer search glow buffer
+          ctx.beginPath();
+          ctx.moveTo(candPoints[0].x, candPoints[0].y);
+          for (let i = 1; i < candPoints.length; i++) {
+            ctx.lineTo(candPoints[i].x, candPoints[i].y);
+          }
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 5.0;
+          ctx.globalAlpha = 0.24;
+          ctx.stroke();
+
+          // Core searching dashed laser vector
+          ctx.lineWidth = 2.0;
+          ctx.globalAlpha = 0.85;
+          ctx.setLineDash([6, 6]);
+          ctx.lineDashOffset = -timeSec * 48 * (dIdx + 1);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+
+          // 3. 2-Opt Edge Swap candidate evaluation rays
+          if (candPoints.length >= 4) {
+            const idxA = 1 + (Math.floor(timeSec * 6 + dIdx) % (candPoints.length - 2));
+            const idxB = 1 + (Math.floor(timeSec * 6 + dIdx + 2) % (candPoints.length - 2));
+            const pA = candPoints[idxA];
+            const pB = candPoints[idxB];
+            if (pA && pB) {
+              ctx.save();
+              ctx.beginPath();
+              ctx.moveTo(pA.x, pA.y);
+              ctx.lineTo(pB.x, pB.y);
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 1.6;
+              ctx.globalAlpha = 0.75;
+              ctx.setLineDash([3, 4]);
+              ctx.lineDashOffset = timeSec * 65;
+              ctx.stroke();
+              ctx.restore();
+            }
+          }
+        }
+      }
+    }
+
+    // 5. Target Nodes: Aerospace Tactical Contacts & Priority Hierarchy (ALWAYS Rendered from frame 0)
     const securedSet = new Set(securedTargets ?? []);
     const targetToDroneMap = new Map();
-    routes.forEach((route, rIdx) => {
-      const color = DRONE_COLORS[rIdx % DRONE_COLORS.length];
-      (route.target_ids ?? []).forEach((tid) => {
-        targetToDroneMap.set(tid, { color, droneId: route.drone_id });
+    if (shouldShowFinalPaths && revealProgress > 0.25) {
+      const routes = schedule?.assigned_routes ?? [];
+      routes.forEach((route, rIdx) => {
+        const color = DRONE_COLORS[rIdx % DRONE_COLORS.length];
+        (route.target_ids ?? []).forEach((tid) => {
+          targetToDroneMap.set(tid, { color, droneId: route.drone_id });
+        });
       });
-    });
+    }
 
-    ctx.globalAlpha = Math.min(1.0, 0.45 + revealProgress * 0.55);
+    // Full visibility across all phases (landing, path-finding, post-optimization, flight playback)
+    ctx.globalAlpha = 1.0;
     targets.forEach((node) => {
       const isDepot = (instance?.depot_ids ?? [0]).includes(node.id);
-      if (isDepot) return; // Depot rendered above
+      if (isDepot) return; // Depot rendered separately
 
       const cx = toCanvasX(node.x, width);
       const cy = toCanvasY(node.y, height);
@@ -780,16 +972,28 @@ export default function OperationsMap({
       // Hierarchy: High-Value (>= 35), Medium (18-34), Standard (< 18)
       const isHVT = priority >= 35;
       const isMed = priority >= 18 && priority < 35;
-      const baseR = isHovered || isInspected ? 6.5 : isHVT ? 5.5 : isMed ? 4.6 : 3.8;
+      const baseR = isHovered || isInspected ? 6.5 : isHVT ? 5.8 : isMed ? 4.8 : 4.0;
 
       ctx.save();
+
+      // Active candidate search ping reticle while drones are finding best path
+      if (isFindingPath && probedTargetIds.has(node.id)) {
+        ctx.beginPath();
+        const pingR = baseR + 3.8 + 1.8 * Math.sin(timeSec * 14 + node.id);
+        ctx.arc(cx, cy, pingR, 0, Math.PI * 2);
+        ctx.strokeStyle = isHVT ? '#ea580c' : '#0284c7';
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([3, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       // Case A: Visited / Secured Target (Verified contact)
       if (isSecured) {
         // Soft green aura glow
         ctx.beginPath();
-        ctx.arc(cx, cy, baseR + 3, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
+        ctx.arc(cx, cy, baseR + 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
         ctx.fill();
 
         // Solid verified core
@@ -798,7 +1002,7 @@ export default function OperationsMap({
         ctx.fillStyle = '#059669';
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.6;
+        ctx.lineWidth = 1.8;
         ctx.stroke();
 
         // White check pip in center
@@ -814,9 +1018,9 @@ export default function OperationsMap({
         // High-value targets get an outer tactical reticle ring
         if (isHVT || isHovered || isInspected) {
           ctx.beginPath();
-          ctx.arc(cx, cy, baseR + 3.8, 0, Math.PI * 2);
+          ctx.arc(cx, cy, baseR + 4, 0, Math.PI * 2);
           ctx.strokeStyle = accent;
-          ctx.lineWidth = 1.1;
+          ctx.lineWidth = 1.2;
           ctx.setLineDash([3, 3]);
           ctx.stroke();
           ctx.setLineDash([]);
@@ -824,7 +1028,7 @@ export default function OperationsMap({
 
         // Core contact disc with subtle shadow
         ctx.shadowColor = accent;
-        ctx.shadowBlur = 5;
+        ctx.shadowBlur = 6;
 
         ctx.beginPath();
         ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
@@ -834,29 +1038,56 @@ export default function OperationsMap({
         // White border ring
         ctx.shadowColor = 'transparent';
         ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.6;
         ctx.stroke();
 
         // Center optical targeting dot
+        ctx.beginPath();
+        ctx.arc(cx, cy, 1.4, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+      // Case C: Unassigned / Tactical Reconnaissance Target Points (High-Contrast, Clear Visibility)
+      } else {
+        // Distinct tactical coloring per priority tier
+        const coreFill = isHVT ? '#ea580c' : isMed ? '#0284c7' : '#1e293b';
+        const ringColor = isHVT 
+          ? 'rgba(234, 88, 12, 0.22)' 
+          : isMed 
+            ? 'rgba(2, 132, 199, 0.18)' 
+            : 'rgba(30, 41, 59, 0.12)';
+
+        // 1. Soft atmospheric detection halo
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR + 3, 0, Math.PI * 2);
+        ctx.fillStyle = ringColor;
+        ctx.fill();
+
+        // 2. High-contrast solid contact core
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
+        ctx.fillStyle = isHovered || isInspected ? '#0284c7' : coreFill;
+        ctx.fill();
+
+        // 3. Crisp white border for separation from canvas
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+
+        // 4. White optical center pip
         ctx.beginPath();
         ctx.arc(cx, cy, 1.3, 0, Math.PI * 2);
         ctx.fillStyle = '#ffffff';
         ctx.fill();
 
-      // Case C: Unassigned / Skipped Target (Tactical reserve contact)
-      } else {
-        ctx.beginPath();
-        ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
-        ctx.fillStyle = isHovered || isInspected ? '#f1f5f9' : '#ffffff';
-        ctx.fill();
-        ctx.strokeStyle = isHovered || isInspected ? '#0284C7' : '#94a3b8';
-        ctx.lineWidth = 1.3;
-        ctx.stroke();
-
-        ctx.beginPath();
-        ctx.arc(cx, cy, 1.3, 0, Math.PI * 2);
-        ctx.fillStyle = '#94a3b8';
-        ctx.fill();
+        // 5. Always display priority score on High-Value and Medium targets
+        if (isHVT || isMed) {
+          ctx.font = '700 8px JetBrains Mono, monospace';
+          ctx.fillStyle = isHVT ? '#c2410c' : '#0369a1';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(`${priority.toFixed(0)}`, cx, cy - baseR - 2.5);
+        }
       }
 
       // Tactical HUD Lock-On Brackets on Hover or Inspector Selection
@@ -919,8 +1150,8 @@ export default function OperationsMap({
     });
     ctx.globalAlpha = 1.0;
 
-    // 6. Drone Fleet Display (Stationed at Depot while Solving or Flying in Mission)
-    const isStationed = (isSolving || (!isPlaying && missionTime === 0)) && hasLanded && !landingState && !introActive && !triggerLandingAnim;
+    // 6. Drone Fleet Display (Stationed at Depot while Ready or Flying in Mission)
+    const isStationed = (!isPlaying && missionTime === 0) && hasLanded && !landingState && !introActive && !triggerLandingAnim;
 
     if (isStationed) {
       // Drones are parked cleanly at the DEPOT
@@ -1121,24 +1352,6 @@ export default function OperationsMap({
         ctx.arc(depotX, depotY, pulseRadius, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
-
-        // Touchdown confirmation badge
-        ctx.save();
-        const badge = totalFleet > 1 
-          ? `FLEET (${totalFleet} UAVs) TOUCHDOWN · DEPOT ONLINE`
-          : 'UAV-01 TOUCHDOWN · DEPOT ONLINE';
-        ctx.font = 'bold 10px Inter, sans-serif';
-        const bW = ctx.measureText(badge).width;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
-        ctx.beginPath();
-        drawSafeRoundRect(ctx, depotX - bW / 2 - 8, depotY - 34, bW + 16, 20, 5);
-        ctx.fill();
-        ctx.strokeStyle = '#10b981';
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
-        ctx.fillStyle = '#059669';
-        ctx.fillText(badge, depotX - bW / 2, depotY - 20);
-        ctx.restore();
       }
     }
 
@@ -1245,7 +1458,15 @@ export default function OperationsMap({
         </div>
 
         {/* Minimalist Layer Segmented Toolbar */}
-        <div className="segmented-control">
+        <div className="flex items-center gap-2">
+          {isFindingPath && (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-amber-800 bg-amber-50/90 border border-amber-300/80 shadow-2xs animate-pulse">
+              <Zap className="w-3.5 h-3.5 text-amber-600 animate-spin" style={{ animationDuration: '3s' }} />
+              <span>Finding Best Path...</span>
+            </div>
+          )}
+
+          <div className="segmented-control">
           <button
             type="button"
             onClick={() => setShowFlightPaths(!showFlightPaths)}
@@ -1301,6 +1522,7 @@ export default function OperationsMap({
           </button>
         </div>
       </div>
+    </div>
 
       {/* 2. Hero Tactical Map Canvas & Integrated Player Dock */}
       <div className="glass-card rounded-2xl overflow-hidden shadow-sm border border-slate-200/80">
@@ -1313,7 +1535,7 @@ export default function OperationsMap({
             onMouseMove={handleCanvasMouseMove}
             onMouseLeave={handleCanvasMouseLeave}
             onClick={handleCanvasClick}
-            className="w-full h-[500px] object-cover block cursor-crosshair bg-[#f8fafc]"
+            className="w-full h-[500px] block cursor-crosshair bg-[#f8fafc]"
           />
 
           {/* Target Hover Detail Badge */}
