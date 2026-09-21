@@ -1,24 +1,92 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   Activity, 
-  Radio, 
   BatteryCharging, 
   Navigation, 
   ShieldCheck, 
-  Cpu, 
   Compass, 
-  Zap,
-  ArrowUpRight
+  Zap, 
+  ArrowUpRight,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  CheckCircle2,
+  Gauge,
+  Wind,
+  Plane,
+  AlertTriangle,
+  Radio
 } from 'lucide-react';
+
+function formatTime(sec) {
+  if (isNaN(sec) || sec < 0) return '0:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function getCardinalDirection(deg) {
+  const normalized = ((deg % 360) + 360) % 360;
+  const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const index = Math.round(normalized / 45) % 8;
+  return directions[index];
+}
+
+// Catmull-Rom to Cubic Bezier curve generator with monotonicity clamping
+function generateSmoothPath(points) {
+  if (!points || points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+  if (points.length === 2) {
+    return `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)} L ${points[1].x.toFixed(1)},${points[1].y.toFixed(1)}`;
+  }
+
+  let d = `M ${points[0].x.toFixed(1)},${points[0].y.toFixed(1)}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+
+    let cp1x = p1.x + (p2.x - p0.x) / 6;
+    let cp1y = p1.y + (p2.y - p0.y) / 6;
+    let cp2x = p2.x - (p3.x - p1.x) / 6;
+    let cp2y = p2.y - (p3.y - p1.y) / 6;
+
+    // Monotonicity clamping: if p1.y <= p2.y, control points must stay between p1.y and p2.y
+    if (p1.y <= p2.y) {
+      cp1y = Math.max(p1.y, Math.min(p2.y, cp1y));
+      cp2y = Math.max(p1.y, Math.min(p2.y, cp2y));
+    } else {
+      cp1y = Math.min(p1.y, Math.max(p2.y, cp1y));
+      cp2y = Math.min(p1.y, Math.max(p2.y, cp2y));
+    }
+
+    d += ` C ${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+function generateAreaPath(points, baselineY) {
+  if (!points || points.length === 0) return '';
+  const linePath = generateSmoothPath(points);
+  const firstX = points[0].x.toFixed(1);
+  const lastX = points[points.length - 1].x.toFixed(1);
+  return `${linePath} L ${lastX},${baselineY} L ${firstX},${baselineY} Z`;
+}
 
 export default function FleetTelemetry({
   instance,
   schedule,
   telemetry,
-  missionTime,
+  missionTime = 0,
+  setMissionTime,
+  windSpeed = 0,
+  windDir = 0,
 }) {
   const drones = instance?.drones ?? [];
   const [selectedDroneId, setSelectedDroneId] = useState(drones[0]?.id ?? 'UAV-01');
+  const [showRawTable, setShowRawTable] = useState(false);
+  const [hoverData, setHoverData] = useState(null);
 
   const telemetryList = telemetry ?? [];
   const telemMap = useMemo(() => {
@@ -39,6 +107,7 @@ export default function FleetTelemetry({
     target_name: 'DEPOT',
     x: 0,
     y: 0,
+    power_watts: 180,
   };
 
   // Fleet overview aggregates
@@ -46,375 +115,957 @@ export default function FleetTelemetry({
     ? telemetryList.reduce((sum, t) => sum + (t.battery_percent ?? 100), 0) / telemetryList.length
     : 100;
   const activeCount = telemetryList.filter((t) => t.flight_phase !== 'RECOVERED' && t.flight_phase !== 'STANDBY').length;
-  const standbyCount = telemetryList.length - activeCount;
   const totalDistKm = (schedule?.assigned_routes ?? []).reduce(
     (acc, r) => acc + ((r.total_flight_time ?? 0) * 14.5) / 1000,
     0
   );
 
-  // Selected route waypoints for profile chart
+  // Selected route and waypoints
   const selectedRoute = (schedule?.assigned_routes ?? []).find(
     (r) => r.drone_id === selectedDroneId
   );
   const waypoints = selectedRoute?.waypoints ?? [];
+  const targets = instance?.targets ?? [];
+
+  // Mission max duration for scaling
+  const maxTime = useMemo(() => {
+    const allWps = (schedule?.assigned_routes ?? []).flatMap((r) => r.waypoints ?? []);
+    const maxDep = allWps.length > 0 ? Math.max(...allWps.map((w) => w.departure_time)) : 600;
+    return Math.max(maxDep, 600);
+  }, [schedule]);
+
+  // Coordinate scales for 800 x 220 viewBox
+  const chartW = 800;
+  const chartH = 220;
+  const padLeft = 55;
+  const padRight = 30;
+  const padTop = 20;
+  const padBottom = 35;
+  const plotW = chartW - padLeft - padRight;
+  const plotH = chartH - padTop - padBottom;
+
+  const timeToX = (t) => padLeft + (Math.max(0, Math.min(maxTime, t)) / maxTime) * plotW;
+  const socToY = (soc) => padTop + plotH - (Math.max(0, Math.min(100, soc)) / 100) * plotH;
+  const altToY = (alt) => padTop + plotH - (Math.max(0, Math.min(80, alt)) / 80) * plotH;
+
+  // Battery points mapped to chart
+  const batteryPoints = useMemo(() => {
+    if (waypoints.length === 0) {
+      return [
+        { x: padLeft, y: socToY(100), t: 0, soc: 100 },
+        { x: padLeft + plotW, y: socToY(100), t: maxTime, soc: 100 },
+      ];
+    }
+    return waypoints.map((w) => ({
+      x: timeToX(w.departure_time),
+      y: socToY(w.remaining_battery_percent),
+      t: w.departure_time,
+      soc: w.remaining_battery_percent,
+      node_id: w.node_id,
+    }));
+  }, [waypoints, maxTime]);
+
+  const batteryLinePath = useMemo(() => generateSmoothPath(batteryPoints), [batteryPoints]);
+  const batteryAreaPath = useMemo(() => generateAreaPath(batteryPoints, padTop + plotH), [batteryPoints]);
+
+  // Realistic aerodynamic altitude profile
+  const altPoints = useMemo(() => {
+    if (waypoints.length < 2) {
+      return [
+        { x: padLeft, y: altToY(0), t: 0, alt: 0 },
+        { x: padLeft + plotW, y: altToY(0), t: maxTime, alt: 0 },
+      ];
+    }
+    const tStart = 0;
+    const tEnd = waypoints[waypoints.length - 1].departure_time;
+    const climbTime = Math.min(22, tEnd * 0.1);
+    const descentStart = Math.max(tEnd - Math.min(25, tEnd * 0.12), climbTime + 15);
+
+    const pts = [
+      { t: tStart, alt: 0, label: 'DEPOT' },
+      { t: climbTime, alt: 60, label: 'CRUISE LEVEL' },
+    ];
+
+    for (let i = 1; i < waypoints.length - 1; i++) {
+      const wp = waypoints[i];
+      pts.push({
+        t: wp.departure_time,
+        alt: 60,
+        label: wp.node_id === 0 ? 'DEPOT' : `T-${wp.node_id.toString().padStart(2, '0')}`,
+      });
+    }
+
+    if (descentStart > climbTime) {
+      pts.push({ t: descentStart, alt: 60, label: 'DESCENT' });
+    }
+    pts.push({ t: tEnd, alt: 0, label: 'RECOVERY' });
+
+    return pts.map((p) => ({
+      x: timeToX(p.t),
+      y: altToY(p.alt),
+      t: p.t,
+      alt: p.alt,
+      label: p.label,
+    }));
+  }, [waypoints, maxTime]);
+
+  const altLinePath = useMemo(() => generateSmoothPath(altPoints), [altPoints]);
+  const altAreaPath = useMemo(() => generateAreaPath(altPoints, padTop + plotH), [altPoints]);
+
+  // Current Live Scrubber Position
+  const currentX = timeToX(missionTime);
+  const currentSoc = activeDroneTelem.battery_percent ?? 100;
+  const currentAlt = activeDroneTelem.z ?? 60;
+  const currentSocY = socToY(currentSoc);
+  const currentAltY = altToY(currentAlt);
+
+  // Time grid ticks (5 intervals)
+  const timeTicks = useMemo(() => {
+    const step = maxTime / 5;
+    return [0, 1, 2, 3, 4, 5].map((i) => {
+      const t = i * step;
+      return { t, x: timeToX(t), label: formatTime(t) };
+    });
+  }, [maxTime]);
+
+  // Safety floor Y level (15%)
+  const safetyFloorY = socToY(15);
+
+  // Interactive mouse scrubbing
+  const handleChartClick = (e) => {
+    if (!setMissionTime) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width;
+    const clickedX = relX * chartW;
+    const clampedPlotX = Math.max(padLeft, Math.min(padLeft + plotW, clickedX));
+    const targetT = ((clampedPlotX - padLeft) / plotW) * maxTime;
+    setMissionTime(targetT);
+  };
+
+  const handleMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width;
+    const currentHoverX = relX * chartW;
+    if (currentHoverX < padLeft || currentHoverX > padLeft + plotW) {
+      setHoverData(null);
+      return;
+    }
+    const hoverT = ((currentHoverX - padLeft) / plotW) * maxTime;
+
+    // Approximate SoC at hoverT
+    let projectedSoc = 100;
+    if (batteryPoints.length > 1) {
+      const nextIdx = batteryPoints.findIndex((p) => p.t >= hoverT);
+      if (nextIdx <= 0) {
+        projectedSoc = batteryPoints[0].soc;
+      } else if (nextIdx >= batteryPoints.length) {
+        projectedSoc = batteryPoints[batteryPoints.length - 1].soc;
+      } else {
+        const pA = batteryPoints[nextIdx - 1];
+        const pB = batteryPoints[nextIdx];
+        const frac = (hoverT - pA.t) / (pB.t - pA.t || 1);
+        projectedSoc = pA.soc + frac * (pB.soc - pA.soc);
+      }
+    }
+
+    setHoverData({
+      x: currentHoverX,
+      t: hoverT,
+      soc: Math.max(0, Math.min(100, projectedSoc)),
+    });
+  };
 
   return (
     <div className="space-y-4">
-      {/* Overview Banner */}
-      <div className="glass-card rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-sky-50 border border-sky-200/80 flex items-center justify-center text-sky-600">
+      {/* 1. Header Bar: Clean, uncluttered, high-impact */}
+      <div className="glass-card rounded-2xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-4 border border-slate-200/80 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-200/80 flex items-center justify-center text-sky-600 shadow-sm">
             <Activity className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 font-sans tracking-tight">
-              Swarm Telemetry & Kinematics
-            </h2>
-            <div className="text-xs text-slate-500 font-sans mt-0.5">
-              Multi-parameter state vectors, aerodynamic power draw, and real-time avionics
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-semibold text-slate-900 tracking-tight">Fleet Telemetry</h1>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                10Hz Live
+              </span>
             </div>
+            <p className="text-xs text-slate-500 mt-0.5">Real-time kinematics & energy telemetry</p>
           </div>
         </div>
 
-        {/* Grouped Telemetry Strip */}
-        <div className="flex items-center gap-3 px-3 py-1.5 rounded-xl bg-white/70 border border-slate-200/80 shadow-sm text-xs font-sans">
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">Active:</span>
-            <span className="font-mono font-semibold text-slate-900">{activeCount.toString().padStart(2, '0')}</span>
+        {/* Minimal Metric Capsules */}
+        <div className="flex items-center gap-2 sm:gap-3 text-xs">
+          <div className="px-3 py-1.5 rounded-xl bg-white/70 border border-slate-200/80 shadow-xs flex items-center gap-2">
+            <span className="text-slate-400">Sorties:</span>
+            <span className="font-mono font-semibold text-slate-900">{activeCount} / {drones.length}</span>
           </div>
-          <div className="h-3.5 w-px bg-slate-200" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">Standby:</span>
-            <span className="font-mono font-semibold text-slate-700">{standbyCount.toString().padStart(2, '0')}</span>
+          <div className="px-3 py-1.5 rounded-xl bg-white/70 border border-slate-200/80 shadow-xs flex items-center gap-2">
+            <span className="text-slate-400">Fleet Avg SoC:</span>
+            <span className={`font-mono font-semibold ${avgBat >= 25 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {avgBat.toFixed(1)}%
+            </span>
           </div>
-          <div className="h-3.5 w-px bg-slate-200" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">Avg Battery:</span>
-            <span className="font-mono font-semibold text-emerald-600">{avgBat.toFixed(1)}%</span>
-          </div>
-          <div className="h-3.5 w-px bg-slate-200" />
-          <div className="flex items-center gap-1.5">
-            <span className="text-slate-500">Total Distance:</span>
+          <div className="px-3 py-1.5 rounded-xl bg-white/70 border border-slate-200/80 shadow-xs flex items-center gap-2">
+            <span className="text-slate-400">Distance:</span>
             <span className="font-mono font-semibold text-sky-700">{totalDistKm.toFixed(1)} km</span>
+          </div>
+          <div className="px-3 py-1.5 rounded-xl bg-sky-50 border border-sky-200/80 shadow-xs flex items-center gap-2 text-sky-800">
+            <Clock className="w-3.5 h-3.5 text-sky-600" />
+            <span className="font-mono font-bold">T+{missionTime.toFixed(0)}s</span>
           </div>
         </div>
       </div>
 
-      {/* 3-Column Layout: Fleet List | Kinematics Charts | Avionics HUD */}
+      {/* 2. Interactive UAV Selector Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {drones.map((drone) => {
+          const telem = telemMap[drone.id] || {};
+          const isSelected = drone.id === selectedDroneId;
+          const soc = telem.battery_percent ?? 100;
+          const phase = telem.flight_phase ?? 'CRUISE';
+          const isCruising = phase === 'CRUISE' || phase === 'TRANSIT_CRUISE';
+          const isLowBat = soc < 15;
+
+          return (
+            <button
+              key={drone.id}
+              onClick={() => setSelectedDroneId(drone.id)}
+              className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer relative overflow-hidden group ${
+                isSelected
+                  ? 'glass-card border-sky-400/90 shadow-md bg-white/95 ring-2 ring-sky-300/40'
+                  : 'bg-white/60 border-slate-200/70 hover:bg-white/90 hover:border-slate-300 shadow-xs'
+              }`}
+            >
+              {isSelected && (
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-sky-400 to-emerald-400" />
+              )}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${isCruising ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                  <span className="font-mono font-bold text-sm text-slate-900 tracking-tight">{drone.id}</span>
+                </div>
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md border ${
+                  isCruising
+                    ? 'bg-sky-50 text-sky-700 border-sky-200/80'
+                    : 'bg-slate-100 text-slate-600 border-slate-200/70'
+                }`}>
+                  {phase}
+                </span>
+              </div>
+
+              {/* Battery bar */}
+              <div className="mt-2.5 space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-slate-400 font-medium">SoC Level</span>
+                  <span className={`font-mono font-bold ${isLowBat ? 'text-rose-600' : 'text-emerald-600'}`}>
+                    {soc.toFixed(1)}%
+                  </span>
+                </div>
+                <div className="w-full bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      isLowBat ? 'bg-rose-500' : soc < 30 ? 'bg-amber-500' : 'bg-emerald-500'
+                    }`}
+                    style={{ width: `${Math.max(0, Math.min(100, soc))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Quick telemetry metrics */}
+              <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px] font-mono text-slate-500">
+                <span>Alt: <strong className="text-slate-800 font-semibold">{(telem.z ?? 60).toFixed(0)}m</strong></span>
+                <span>Spd: <strong className="text-slate-800 font-semibold">{(telem.speed_mps ?? 14.5).toFixed(1)}m/s</strong></span>
+                <span className="text-sky-700 font-semibold font-sans">
+                  {telem.target_name ? `→ ${telem.target_name}` : 'DEPOT'}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 3. Primary Workspace: Graphs Left (8 cols) & Flight Avionics Right (4 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left Column: Fleet List (3 cols) */}
-        <div className="lg:col-span-3 space-y-2">
-          <div className="text-xs font-semibold text-slate-900 font-sans px-1 flex items-center justify-between">
-            <span>Fleet Roster</span>
-            <span className="text-[11px] font-mono font-normal text-slate-400">{drones.length} UAVs</span>
+        {/* Left Column: Redesigned Kinematics Profiles (8 cols) */}
+        <div className="lg:col-span-8 space-y-4">
+          
+          {/* Chart 1: Battery State of Charge (%) */}
+          <div className="glass-card rounded-2xl p-4 space-y-3 border border-slate-200/80 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-emerald-50 border border-emerald-200/80 flex items-center justify-center text-emerald-600">
+                  <BatteryCharging className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h2 className="text-xs font-semibold text-slate-900 tracking-tight">Battery State of Charge (%)</h2>
+                  <span className="text-[11px] text-slate-400 font-mono">Telemetry Profile: {selectedDroneId}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs font-mono">
+                <div className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200/80 text-emerald-800 font-bold">
+                  {currentSoc.toFixed(1)}% SoC
+                </div>
+                <div className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200/80 text-slate-600 font-medium">
+                  Reserve: {(selectedRoute?.final_reserve_percent ?? 100).toFixed(1)}%
+                </div>
+                {(selectedRoute?.final_reserve_percent ?? 100) >= 15 ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-sans font-medium px-2 py-0.5 rounded-md bg-emerald-50/80 border border-emerald-200/60">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Floor Met
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[10px] text-rose-600 font-sans font-medium px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200">
+                    <AlertTriangle className="w-3 h-3" />
+                    Floor Warning
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* SVG Visualizer with smooth cubic curves and interactive scrubber */}
+            <div
+              className="h-56 w-full bg-gradient-to-b from-white to-slate-50/50 rounded-xl p-2 border border-slate-200/80 shadow-inner relative cursor-crosshair select-none"
+              onClick={handleChartClick}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={() => setHoverData(null)}
+            >
+              <svg className="w-full h-full" viewBox={`0 0 ${chartW} ${chartH}`} preserveAspectRatio="none">
+                <defs>
+                  {/* Battery area gradient */}
+                  <linearGradient id="batteryAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+                    <stop offset="70%" stopColor="#0284c7" stopOpacity="0.08" />
+                    <stop offset="100%" stopColor="#0284c7" stopOpacity="0.01" />
+                  </linearGradient>
+
+                  {/* Battery line stroke gradient */}
+                  <linearGradient id="batteryLineGrad" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#059669" />
+                    <stop offset="80%" stopColor="#0284c7" />
+                    <stop offset="100%" stopColor="#6366f1" />
+                  </linearGradient>
+
+                  {/* Safety floor danger zone gradient */}
+                  <linearGradient id="dangerZoneGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity="0.10" />
+                    <stop offset="100%" stopColor="#ef4444" stopOpacity="0.02" />
+                  </linearGradient>
+
+                  {/* Soft curve glow */}
+                  <filter id="curveGlow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#10b981" floodOpacity="0.3" />
+                  </filter>
+                </defs>
+
+                {/* 15% Safety Floor Shaded Zone */}
+                <rect
+                  x={padLeft}
+                  y={safetyFloorY}
+                  width={plotW}
+                  height={padTop + plotH - safetyFloorY}
+                  fill="url(#dangerZoneGrad)"
+                />
+
+                {/* Horizontal Grid lines and labels */}
+                {[100, 75, 50, 25, 0].map((socVal) => {
+                  const y = socToY(socVal);
+                  return (
+                    <g key={socVal}>
+                      <line
+                        x1={padLeft}
+                        y1={y}
+                        x2={padLeft + plotW}
+                        y2={y}
+                        stroke="rgba(148, 163, 184, 0.25)"
+                        strokeDasharray={socVal === 0 ? '0' : '3 3'}
+                        strokeWidth="1"
+                      />
+                      <text
+                        x={padLeft - 8}
+                        y={y + 3.5}
+                        textAnchor="end"
+                        fontSize="9"
+                        fill="#94a3b8"
+                        fontFamily="ui-monospace, monospace"
+                        fontWeight="500"
+                      >
+                        {socVal}%
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* 15% Reserve Safety Floor Line */}
+                <line
+                  x1={padLeft}
+                  y1={safetyFloorY}
+                  x2={padLeft + plotW}
+                  y2={safetyFloorY}
+                  stroke="#ef4444"
+                  strokeWidth="1.2"
+                  strokeDasharray="4 4"
+                />
+                <rect
+                  x={padLeft + 6}
+                  y={safetyFloorY - 14}
+                  width="86"
+                  height="12"
+                  rx="3"
+                  fill="#fee2e2"
+                  stroke="#fca5a5"
+                  strokeWidth="0.8"
+                />
+                <text
+                  x={padLeft + 10}
+                  y={safetyFloorY - 5}
+                  fill="#b91c1c"
+                  fontSize="7.5"
+                  fontFamily="Inter, sans-serif"
+                  fontWeight="600"
+                >
+                  15% SAFETY FLOOR
+                </text>
+
+                {/* Vertical Time Grid Ticks & Labels */}
+                {timeTicks.map((tick) => (
+                  <g key={tick.t}>
+                    <line
+                      x1={tick.x}
+                      y1={padTop}
+                      x2={tick.x}
+                      y2={padTop + plotH}
+                      stroke="rgba(148, 163, 184, 0.15)"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={tick.x}
+                      y={padTop + plotH + 15}
+                      textAnchor="middle"
+                      fontSize="9"
+                      fill="#94a3b8"
+                      fontFamily="ui-monospace, monospace"
+                    >
+                      {tick.label}
+                    </text>
+                  </g>
+                ))}
+
+                {/* Smooth Area Under Curve */}
+                {batteryAreaPath && (
+                  <path d={batteryAreaPath} fill="url(#batteryAreaGrad)" />
+                )}
+
+                {/* Smooth Main Discharge Spline */}
+                {batteryLinePath && (
+                  <path
+                    d={batteryLinePath}
+                    fill="none"
+                    stroke="url(#batteryLineGrad)"
+                    strokeWidth="2.8"
+                    strokeLinecap="round"
+                    filter="url(#curveGlow)"
+                  />
+                )}
+
+                {/* Waypoint Nodes on Curve */}
+                {batteryPoints.map((pt, idx) => (
+                  <g key={idx}>
+                    <circle
+                      cx={pt.x}
+                      cy={pt.y}
+                      r="3.5"
+                      fill="#ffffff"
+                      stroke="#059669"
+                      strokeWidth="2"
+                    />
+                    {pt.node_id !== undefined && pt.node_id !== 0 && (
+                      <text
+                        x={pt.x}
+                        y={Math.max(padTop + 10, pt.y - 7)}
+                        textAnchor="middle"
+                        fontSize="8"
+                        fill="#0369a1"
+                        fontFamily="ui-monospace, monospace"
+                        fontWeight="600"
+                      >
+                        T-{pt.node_id}
+                      </text>
+                    )}
+                  </g>
+                ))}
+
+                {/* Live Current Time Scrubber Line */}
+                <line
+                  x1={currentX}
+                  y1={padTop}
+                  x2={currentX}
+                  y2={padTop + plotH}
+                  stroke="#0284c7"
+                  strokeWidth="1.8"
+                  strokeDasharray="4 2"
+                />
+
+                {/* Current Live Marker Reticle */}
+                <circle
+                  cx={currentX}
+                  cy={currentSocY}
+                  r="7"
+                  fill="rgba(2, 132, 199, 0.25)"
+                />
+                <circle
+                  cx={currentX}
+                  cy={currentSocY}
+                  r="3.5"
+                  fill="#0284c7"
+                  stroke="#ffffff"
+                  strokeWidth="1.8"
+                />
+
+                {/* Live Floating Tooltip Capsule */}
+                <g transform={`translate(${Math.min(padLeft + plotW - 75, Math.max(padLeft + 5, currentX - 35))}, ${padTop + 6})`}>
+                  <rect
+                    width="70"
+                    height="16"
+                    rx="4"
+                    fill="rgba(15, 23, 42, 0.85)"
+                    backdropFilter="blur(4px)"
+                  />
+                  <text
+                    x="35"
+                    y="11.5"
+                    textAnchor="middle"
+                    fill="#ffffff"
+                    fontSize="8.5"
+                    fontFamily="ui-monospace, monospace"
+                    fontWeight="600"
+                  >
+                    T+{missionTime.toFixed(0)}s • {currentSoc.toFixed(0)}%
+                  </text>
+                </g>
+
+                {/* Hover Line & Marker */}
+                {hoverData && (
+                  <g>
+                    <line
+                      x1={hoverData.x}
+                      y1={padTop}
+                      x2={hoverData.x}
+                      y2={padTop + plotH}
+                      stroke="#64748b"
+                      strokeWidth="1"
+                      strokeDasharray="2 2"
+                    />
+                    <circle
+                      cx={hoverData.x}
+                      cy={socToY(hoverData.soc)}
+                      r="4"
+                      fill="#6366f1"
+                      stroke="#ffffff"
+                      strokeWidth="1.5"
+                    />
+                  </g>
+                )}
+              </svg>
+
+              {/* Hover Tooltip Overlay */}
+              {hoverData && (
+                <div
+                  className="absolute pointer-events-none -top-1 px-2.5 py-1 rounded-lg bg-slate-900/90 text-white text-[10px] font-mono shadow-lg border border-slate-700/60 backdrop-blur-md transform -translate-x-1/2 flex items-center gap-2 z-20"
+                  style={{ left: `${(hoverData.x / chartW) * 100}%` }}
+                >
+                  <span className="text-slate-300">T+{Math.round(hoverData.t)}s</span>
+                  <span className="text-emerald-400 font-bold">{hoverData.soc.toFixed(1)}%</span>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="space-y-2">
-            {drones.map((drone) => {
-              const telem = telemMap[drone.id] || {};
-              const isSelected = drone.id === selectedDroneId;
-              const soc = telem.battery_percent ?? 100;
-              const phase = telem.flight_phase ?? 'CRUISE';
-              const isCruising = phase === 'CRUISE' || phase === 'TRANSIT_CRUISE';
+          {/* Chart 2: Flight Altitude & Elevation Profile (m AGL) */}
+          <div className="glass-card rounded-2xl p-4 space-y-3 border border-slate-200/80 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/70 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-sky-50 border border-sky-200/80 flex items-center justify-center text-sky-600">
+                  <Plane className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h2 className="text-xs font-semibold text-slate-900 tracking-tight">Flight Altitude Profile (m AGL)</h2>
+                  <span className="text-[11px] text-slate-400 font-mono">Vertical Envelope & Terrain Clearance</span>
+                </div>
+              </div>
 
-              return (
-                <button
-                  key={drone.id}
-                  onClick={() => setSelectedDroneId(drone.id)}
-                  className={`w-full text-left p-3.5 rounded-xl border transition-all cursor-pointer ${
-                    isSelected
-                      ? 'glass-card border-sky-300 shadow-sm bg-white/95 ring-1 ring-sky-200'
-                      : 'border-slate-200/70 bg-white/60 hover:bg-white/90 hover:border-slate-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-sm text-slate-900">{drone.id}</span>
-                    <span className={`text-[10px] font-sans px-2 py-0.5 rounded-md font-medium ${
-                      isCruising
-                        ? 'bg-sky-50 text-sky-700 border border-sky-200/80'
-                        : 'bg-slate-100 text-slate-500 border border-slate-200/70'
-                    }`}>
-                      {phase}
-                    </span>
-                  </div>
+              <div className="flex items-center gap-2 text-xs font-mono">
+                <span className="px-2.5 py-1 rounded-lg bg-sky-50 border border-sky-200/80 text-sky-800 font-bold">
+                  {(activeDroneTelem.z ?? 60).toFixed(0)}m AGL
+                </span>
+                <span className="text-[11px] text-slate-400 font-sans">Cruise: 60m Nominal</span>
+              </div>
+            </div>
 
-                  <div className="mt-2.5 space-y-1.5 text-xs">
-                    <div className="flex justify-between font-sans text-[11px] text-slate-500">
-                      <span>Battery SoC</span>
-                      <span className={`font-mono font-semibold ${soc >= 15 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {soc.toFixed(0)}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all ${
-                          soc >= 15 ? 'bg-emerald-500' : 'bg-rose-500'
-                        }`}
-                        style={{ width: `${Math.max(0, Math.min(100, soc))}%` }}
+            {/* Altitude Profile SVG */}
+            <div
+              className="h-44 w-full bg-gradient-to-b from-white to-sky-50/30 rounded-xl p-2 border border-slate-200/80 shadow-inner relative cursor-crosshair select-none"
+              onClick={handleChartClick}
+            >
+              <svg className="w-full h-full" viewBox={`0 0 ${chartW} ${chartH}`} preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="altAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#0284c7" stopOpacity="0.22" />
+                    <stop offset="75%" stopColor="#0284c7" stopOpacity="0.06" />
+                    <stop offset="100%" stopColor="#0284c7" stopOpacity="0.01" />
+                  </linearGradient>
+
+                  <linearGradient id="altLineGrad" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#0284c7" />
+                    <stop offset="50%" stopColor="#38bdf8" />
+                    <stop offset="100%" stopColor="#0284c7" />
+                  </linearGradient>
+                </defs>
+
+                {/* Altitude Grid Lines */}
+                {[80, 60, 40, 20, 0].map((altVal) => {
+                  const y = altToY(altVal);
+                  return (
+                    <g key={altVal}>
+                      <line
+                        x1={padLeft}
+                        y1={y}
+                        x2={padLeft + plotW}
+                        y2={y}
+                        stroke="rgba(148, 163, 184, 0.25)"
+                        strokeDasharray={altVal === 0 ? '0' : '3 3'}
+                        strokeWidth={altVal === 0 ? '1.5' : '1'}
                       />
-                    </div>
+                      <text
+                        x={padLeft - 8}
+                        y={y + 3.5}
+                        textAnchor="end"
+                        fontSize="9"
+                        fill="#94a3b8"
+                        fontFamily="ui-monospace, monospace"
+                      >
+                        {altVal}m
+                      </text>
+                    </g>
+                  );
+                })}
 
-                    <div className="flex justify-between text-slate-500 pt-1 font-mono text-[10px]">
-                      <span>Alt: {(telem.z ?? 60).toFixed(0)}m</span>
-                      <span>Spd: {(telem.speed_mps ?? 14.5).toFixed(1)}m/s</span>
-                      <span>Hdg: {(telem.heading_deg ?? 0).toFixed(0)}°</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+                {/* Nominal Cruise Guideline */}
+                <line
+                  x1={padLeft}
+                  y1={altToY(60)}
+                  x2={padLeft + plotW}
+                  y2={altToY(60)}
+                  stroke="#0284c7"
+                  strokeWidth="1"
+                  strokeDasharray="4 4"
+                  strokeOpacity="0.5"
+                />
+
+                {/* Vertical Time Grid Ticks */}
+                {timeTicks.map((tick) => (
+                  <g key={tick.t}>
+                    <line
+                      x1={tick.x}
+                      y1={padTop}
+                      x2={tick.x}
+                      y2={padTop + plotH}
+                      stroke="rgba(148, 163, 184, 0.15)"
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={tick.x}
+                      y={padTop + plotH + 15}
+                      textAnchor="middle"
+                      fontSize="9"
+                      fill="#94a3b8"
+                      fontFamily="ui-monospace, monospace"
+                    >
+                      {tick.label}
+                    </text>
+                  </g>
+                ))}
+
+                {/* Filled Altitude Area */}
+                {altAreaPath && (
+                  <path d={altAreaPath} fill="url(#altAreaGrad)" />
+                )}
+
+                {/* Smooth Altitude Vector Profile */}
+                {altLinePath && (
+                  <path
+                    d={altLinePath}
+                    fill="none"
+                    stroke="url(#altLineGrad)"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                  />
+                )}
+
+                {/* Altitude Waypoints */}
+                {altPoints.map((pt, idx) => (
+                  <g key={idx}>
+                    <circle
+                      cx={pt.x}
+                      cy={pt.y}
+                      r="3"
+                      fill="#ffffff"
+                      stroke="#0284c7"
+                      strokeWidth="1.8"
+                    />
+                    {pt.label && pt.alt > 0 && (
+                      <text
+                        x={pt.x}
+                        y={pt.y - 7}
+                        textAnchor="middle"
+                        fontSize="7.5"
+                        fill="#0369a1"
+                        fontFamily="ui-monospace, monospace"
+                        fontWeight="600"
+                      >
+                        {pt.label}
+                      </text>
+                    )}
+                  </g>
+                ))}
+
+                {/* Live Current Time Scrubber Line */}
+                <line
+                  x1={currentX}
+                  y1={padTop}
+                  x2={currentX}
+                  y2={padTop + plotH}
+                  stroke="#0284c7"
+                  strokeWidth="1.8"
+                  strokeDasharray="4 2"
+                />
+
+                {/* Current Live Marker Reticle */}
+                <circle
+                  cx={currentX}
+                  cy={currentAltY}
+                  r="6"
+                  fill="rgba(2, 132, 199, 0.25)"
+                />
+                <circle
+                  cx={currentX}
+                  cy={currentAltY}
+                  r="3"
+                  fill="#0284c7"
+                  stroke="#ffffff"
+                  strokeWidth="1.5"
+                />
+              </svg>
+            </div>
           </div>
         </div>
 
-        {/* Center Column: Kinematics Profile Charts (6 cols) */}
-        <div className="lg:col-span-6 space-y-4">
-          <div className="glass-card rounded-2xl p-4 space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
+        {/* Right Column: Active Avionics HUD & Sortie Progression (4 cols) */}
+        <div className="lg:col-span-4 space-y-4">
+          
+          {/* Active Avionics Card */}
+          <div className="glass-card rounded-2xl p-4 space-y-3.5 border border-slate-200/80 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200/70 pb-2.5">
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-md bg-sky-50 border border-sky-200/80 flex items-center justify-center text-sky-600">
-                  <Zap className="w-3 h-3" />
+                <div className="w-6 h-6 rounded-lg bg-sky-50 border border-sky-200/80 flex items-center justify-center text-sky-600">
+                  <Compass className="w-3.5 h-3.5" />
                 </div>
-                <span className="text-xs font-semibold text-slate-900 font-sans">
-                  Kinematics Profile:
-                </span>
-                <span className="font-mono text-xs font-bold text-sky-700">{selectedDroneId}</span>
+                <h2 className="text-xs font-semibold text-slate-900 tracking-tight">Avionics & Vector State</h2>
               </div>
-              <span className="text-[11px] text-slate-400 font-mono">
-                Time: T+{missionTime.toFixed(0)}s
+              <span className="font-mono text-xs font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md border border-sky-200/70">
+                {selectedDroneId}
               </span>
             </div>
 
-            {/* Battery SoC Curve (SVG Visualizer) */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between text-xs font-sans text-slate-500">
-                <span>Battery State of Charge (%)</span>
-                <span className="text-emerald-600 font-semibold font-mono">
-                  {(activeDroneTelem.battery_percent ?? 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="h-32 w-full bg-white/80 rounded-xl p-2.5 border border-slate-200/80 shadow-inner relative">
-                <svg className="w-full h-full" viewBox="0 0 400 100" preserveAspectRatio="none">
-                  {/* 15% Safety Floor Line */}
-                  <line x1="0" y1="85" x2="400" y2="85" stroke="#ef4444" strokeWidth="1" strokeDasharray="4 4" strokeOpacity="0.7" />
-                  <text x="5" y="81" fill="#ef4444" fontSize="8" fontFamily="Inter, sans-serif" fontWeight="500">15% SAFETY FLOOR</text>
-
-                  {/* Battery Curve */}
-                  {waypoints.length > 1 && (() => {
-                    const maxT = Math.max(...waypoints.map((w) => w.departure_time), 600);
-                    const points = waypoints.map((w) => {
-                      const px = (w.departure_time / maxT) * 400;
-                      const py = 100 - (w.remaining_battery_percent / 100) * 90;
-                      return `${px},${py}`;
-                    }).join(' ');
-
-                    return (
-                      <>
-                        <polyline fill="none" stroke="#059669" strokeWidth="2.5" points={points} />
-                        {/* Current Time Marker */}
-                        {(() => {
-                          const cx = Math.min(400, Math.max(0, (missionTime / maxT) * 400));
-                          const cy = 100 - ((activeDroneTelem.battery_percent ?? 100) / 100) * 90;
-                          return (
-                            <>
-                              <line x1={cx} y1="0" x2={cx} y2="100" stroke="#0284c7" strokeWidth="1.5" strokeDasharray="3 3" />
-                              <circle cx={cx} cy={cy} r="4" fill="#0284c7" stroke="#ffffff" strokeWidth="2" />
-                            </>
-                          );
-                        })()}
-                      </>
-                    );
-                  })()}
-                </svg>
-              </div>
-            </div>
-
-            {/* Altitude Profile Curve */}
-            <div className="space-y-1.5 pt-1">
-              <div className="flex justify-between text-xs font-sans text-slate-500">
-                <span>Flight Altitude (m AGL)</span>
-                <span className="text-sky-700 font-semibold font-mono">{(activeDroneTelem.z ?? 60).toFixed(0)} m</span>
-              </div>
-              <div className="h-28 w-full bg-white/80 rounded-xl p-2.5 border border-slate-200/80 shadow-inner relative">
-                <svg className="w-full h-full" viewBox="0 0 400 100" preserveAspectRatio="none">
-                  {/* Ground Level */}
-                  <line x1="0" y1="95" x2="400" y2="95" stroke="rgba(15,23,42,0.12)" strokeWidth="1" />
-                  
-                  {/* Altitude Bar Profile */}
-                  {waypoints.length > 0 && (() => {
-                    const maxT = Math.max(...waypoints.map((w) => w.departure_time), 600);
-                    const points = [
-                      '0,95',
-                      ...waypoints.map((w) => {
-                        const px = (w.departure_time / maxT) * 400;
-                        const py = 95 - Math.min(80, (w.node_id === 0 ? 10 : 65));
-                        return `${px},${py}`;
-                      }),
-                      '400,95',
-                    ].join(' ');
-
-                    return (
-                      <>
-                        <polygon fill="rgba(2, 132, 199, 0.08)" stroke="#0284c7" strokeWidth="2" points={points} />
-                        {(() => {
-                          const cx = Math.min(400, Math.max(0, (missionTime / maxT) * 400));
-                          return (
-                            <line x1={cx} y1="0" x2={cx} y2="100" stroke="#d97706" strokeWidth="1.5" strokeDasharray="3 3" />
-                          );
-                        })()}
-                      </>
-                    );
-                  })()}
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Avionics HUD Card (3 cols) */}
-        <div className="lg:col-span-3 space-y-3">
-          <div className="glass-card rounded-2xl p-4 space-y-3">
-            <div className="font-sans text-xs font-semibold text-slate-900 border-b border-slate-200/80 pb-2 flex items-center justify-between">
-              <span>Avionics HUD</span>
-              <span className="text-sky-700 font-mono font-bold">{selectedDroneId}</span>
-            </div>
-
-            {/* Avionics Instrument Readout Rows */}
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-200/60 font-sans">
-                <span className="text-slate-500">Callsign</span>
-                <span className="text-slate-900 font-mono font-semibold">{selectedDroneId}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 font-sans">
-                <span className="text-slate-500">Flight Phase</span>
-                <span className="text-sky-700 font-medium">{activeDroneTelem.flight_phase}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 font-sans">
-                <span className="text-slate-500">Groundspeed</span>
-                <span className="text-slate-900 font-mono font-semibold">{(activeDroneTelem.speed_mps ?? 14.5).toFixed(1)} m/s</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 font-sans">
-                <span className="text-slate-500">Altitude (AGL)</span>
-                <span className="text-slate-900 font-mono font-semibold">{(activeDroneTelem.z ?? 60).toFixed(0)} m</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 font-sans">
-                <span className="text-slate-500">Heading Azimuth</span>
-                <span className="text-sky-700 font-mono font-semibold">{(activeDroneTelem.heading_deg ?? 0).toFixed(0)}°</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 font-sans">
-                <span className="text-slate-500">Current Target</span>
-                <span className="text-amber-700 font-medium">{activeDroneTelem.target_name ?? 'DEPOT'}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 font-sans">
-                <span className="text-slate-500">Comm Link RSSI</span>
-                <span className="text-emerald-600 font-mono font-semibold">99.8%</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-200/60 font-sans">
-                <span className="text-slate-500">Geofence Status</span>
-                <span className="text-emerald-600 font-medium">Clear</span>
-              </div>
-            </div>
-
-            {/* Tactical Compass Visualizer */}
-            <div className="pt-2 flex flex-col items-center justify-center">
-              <div className="relative w-20 h-20 rounded-full border border-slate-200/90 flex items-center justify-center bg-white/90 shadow-inner">
+            {/* Tactical Compass Dial */}
+            <div className="flex flex-col items-center justify-center py-2">
+              <div className="relative w-24 h-24 rounded-full border border-slate-200/90 flex items-center justify-center bg-gradient-to-br from-white to-slate-50/80 shadow-inner">
+                {/* Cardinal Points */}
                 <span className="absolute top-1 text-[8px] font-sans font-bold text-slate-400">N</span>
                 <span className="absolute right-1 text-[8px] font-sans font-bold text-slate-400">E</span>
                 <span className="absolute bottom-1 text-[8px] font-sans font-bold text-slate-400">S</span>
                 <span className="absolute left-1 text-[8px] font-sans font-bold text-slate-400">W</span>
-                
-                {/* Needle */}
+
+                {/* Rotating Needle */}
                 <div
-                  className="w-1 h-14 bg-gradient-to-b from-sky-600 via-transparent to-slate-400 transition-transform duration-200 rounded"
+                  className="w-1 h-18 bg-gradient-to-b from-sky-600 via-transparent to-slate-400 transition-transform duration-200 rounded"
                   style={{ transform: `rotate(${activeDroneTelem.heading_deg ?? 0}deg)` }}
                 />
-                <div className="w-2 h-2 rounded-full bg-sky-600 z-10" />
+                <div className="w-2.5 h-2.5 rounded-full bg-sky-600 shadow-sm z-10 border border-white" />
               </div>
-              <div className="text-[11px] font-sans text-slate-500 mt-2 flex items-center gap-1.5">
-                <span>Azimuth:</span>
-                <span className="font-mono font-semibold text-slate-800">{(activeDroneTelem.heading_deg ?? 0).toFixed(0)}°</span>
+              
+              <div className="text-xs font-mono font-bold text-slate-800 mt-2 flex items-center gap-1.5">
+                <span>{(activeDroneTelem.heading_deg ?? 0).toFixed(0)}°</span>
+                <span className="text-[11px] font-sans text-sky-700 font-semibold px-1.5 py-0.2 bg-sky-50 rounded border border-sky-200/60">
+                  {getCardinalDirection(activeDroneTelem.heading_deg ?? 0)}
+                </span>
               </div>
+            </div>
+
+            {/* 4 Clean Glass Metric Tiles */}
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 rounded-xl bg-white/70 border border-slate-200/70 shadow-2xs">
+                <span className="text-[11px] text-slate-400 block font-medium">Groundspeed</span>
+                <span className="font-mono text-sm font-bold text-slate-900 mt-0.5 block">
+                  {(activeDroneTelem.speed_mps ?? 14.5).toFixed(1)} m/s
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/70 border border-slate-200/70 shadow-2xs">
+                <span className="text-[11px] text-slate-400 block font-medium">Altitude AGL</span>
+                <span className="font-mono text-sm font-bold text-slate-900 mt-0.5 block">
+                  {(activeDroneTelem.z ?? 60).toFixed(0)} m
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/70 border border-slate-200/70 shadow-2xs">
+                <span className="text-[11px] text-slate-400 block font-medium">Aero Power</span>
+                <span className="font-mono text-sm font-bold text-amber-600 mt-0.5 block">
+                  {(activeDroneTelem.power_watts ?? 180).toFixed(0)} W
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-white/70 border border-slate-200/70 shadow-2xs">
+                <span className="text-[11px] text-slate-400 block font-medium">Active Vector</span>
+                <span className="font-sans text-xs font-semibold text-sky-700 mt-0.5 block truncate">
+                  {activeDroneTelem.target_name ?? 'DEPOT'}
+                </span>
+              </div>
+            </div>
+
+            {/* Comm Link & Geofence Status */}
+            <div className="pt-1 flex items-center justify-between text-[11px] font-sans border-t border-slate-200/60 text-slate-500">
+              <div className="flex items-center gap-1.5">
+                <Radio className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Link RSSI: <strong className="text-slate-800 font-mono">99.8%</strong></span>
+              </div>
+              <div className="flex items-center gap-1 text-emerald-600 font-medium">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Geofence Clear</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sortie Route Progression (Replaces verbose table with actionable sequence) */}
+          <div className="glass-card rounded-2xl p-4 space-y-3 border border-slate-200/80 shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-200/70 pb-2">
+              <span className="text-xs font-semibold text-slate-900">Sortie Waypoint Sequence</span>
+              <span className="text-[11px] text-slate-400 font-mono">{waypoints.length} waypoints</span>
+            </div>
+
+            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+              {waypoints.map((wp, idx) => {
+                const isPassed = missionTime >= wp.departure_time;
+                const isCurrent = !isPassed && (idx === 0 || missionTime >= waypoints[idx - 1].departure_time);
+                const isDepot = wp.node_id === 0;
+                const targetNode = targets.find((t) => t.id === wp.node_id);
+                const label = isDepot ? (idx === 0 ? 'DEPOT LAUNCH' : 'DEPOT RECOVERY') : (targetNode?.name || `Target #${wp.node_id}`);
+
+                return (
+                  <div
+                    key={idx}
+                    className={`flex items-center justify-between p-2 rounded-xl border text-xs transition-all ${
+                      isCurrent
+                        ? 'bg-sky-50 border-sky-300 shadow-2xs text-sky-900'
+                        : isPassed
+                          ? 'bg-white/50 border-slate-200/60 text-slate-500'
+                          : 'bg-white/80 border-slate-200/80 text-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                        isPassed
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : isCurrent
+                            ? 'bg-sky-600 text-white animate-pulse'
+                            : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {idx + 1}
+                      </div>
+                      <span className="font-semibold">{label}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 font-mono text-[11px]">
+                      <span className="text-slate-400">T+{wp.departure_time.toFixed(0)}s</span>
+                      <span className={`font-semibold ${wp.remaining_battery_percent >= 15 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {wp.remaining_battery_percent.toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Detailed Fleet Kinematics Table */}
-      <div className="glass-card rounded-2xl p-4 space-y-3.5">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-900 font-sans">
-            Fleet Kinematics State Vectors (10Hz)
-          </span>
-          <span className="text-xs text-slate-400 font-sans">{telemetryList.length} sorties monitored</span>
-        </div>
+      {/* 4. Collapsible Detailed 10Hz Kinematics Vectors (Keeps page clean by default) */}
+      <div className="glass-card rounded-2xl p-4 border border-slate-200/80 shadow-sm">
+        <button
+          onClick={() => setShowRawTable(!showRawTable)}
+          className="w-full flex items-center justify-between text-xs font-semibold text-slate-700 hover:text-slate-900 cursor-pointer transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <Gauge className="w-4 h-4 text-slate-500" />
+            <span>Raw Kinematics State Vectors (10Hz)</span>
+            <span className="text-[11px] font-normal text-slate-400 font-mono">
+              ({telemetryList.length} UAVs tracked)
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-sky-700 text-xs">
+            <span>{showRawTable ? 'Hide Table' : 'Show Table'}</span>
+            {showRawTable ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
+        </button>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse font-sans">
-            <thead>
-              <tr className="border-b border-slate-200/80 text-slate-400 text-[11px] font-medium">
-                <th className="py-2.5 px-3">Callsign</th>
-                <th className="py-2.5 px-3">Coordinates (X, Y)</th>
-                <th className="py-2.5 px-3">Alt Z (m)</th>
-                <th className="py-2.5 px-3">Battery SoC</th>
-                <th className="py-2.5 px-3">Groundspeed</th>
-                <th className="py-2.5 px-3">Wind Resistance</th>
-                <th className="py-2.5 px-3">Aero Power</th>
-                <th className="py-2.5 px-3">Flight Phase</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200/60 font-mono">
-              {telemetryList.map((t) => {
-                const soc = t.battery_percent ?? 100;
-                const gSpeed = (t.ground_speed_mps ?? t.speed_mps ?? 14.5).toFixed(1);
-                const windComp = (t.wind_along_mps ?? 0).toFixed(1);
-                const isTail = (t.wind_along_mps ?? 0) > 0.5;
-                const isHead = (t.wind_along_mps ?? 0) < -0.5;
+        {showRawTable && (
+          <div className="mt-3.5 overflow-x-auto border-t border-slate-200/70 pt-3">
+            <table className="w-full text-left text-xs border-collapse font-sans">
+              <thead>
+                <tr className="border-b border-slate-200/80 text-slate-400 text-[11px] font-medium">
+                  <th className="py-2 px-3">Callsign</th>
+                  <th className="py-2 px-3">Position (X, Y)</th>
+                  <th className="py-2 px-3">Alt (m)</th>
+                  <th className="py-2 px-3">Battery SoC</th>
+                  <th className="py-2 px-3">Groundspeed</th>
+                  <th className="py-2 px-3">Wind Comp</th>
+                  <th className="py-2 px-3">Power</th>
+                  <th className="py-2 px-3">Phase</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200/60 font-mono text-[11px]">
+                {telemetryList.map((t) => {
+                  const soc = t.battery_percent ?? 100;
+                  const gSpeed = (t.ground_speed_mps ?? t.speed_mps ?? 14.5).toFixed(1);
+                  const windComp = (t.wind_along_mps ?? 0).toFixed(1);
 
-                return (
-                  <tr key={t.drone_id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-2.5 px-3 font-semibold text-sky-700">{t.drone_id}</td>
-                    <td className="py-2.5 px-3 text-slate-700">
-                      ({(t.x ?? 0).toFixed(0)}, {(t.y ?? 0).toFixed(0)})
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-700">{(t.z ?? 60).toFixed(0)}</td>
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-14 bg-slate-100 border border-slate-200/60 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${soc >= 15 ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                            style={{ width: `${Math.max(0, Math.min(100, soc))}%` }}
-                          />
-                        </div>
+                  return (
+                    <tr key={t.drone_id} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-2 px-3 font-semibold text-sky-700">{t.drone_id}</td>
+                      <td className="py-2 px-3 text-slate-700">({(t.x ?? 0).toFixed(0)}, {(t.y ?? 0).toFixed(0)})</td>
+                      <td className="py-2 px-3 text-slate-700">{(t.z ?? 60).toFixed(0)}m</td>
+                      <td className="py-2 px-3">
                         <span className={`font-semibold ${soc >= 15 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {soc.toFixed(0)}%
+                          {soc.toFixed(1)}%
                         </span>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3 font-semibold text-slate-900">{gSpeed} m/s</td>
-                    <td className="py-2.5 px-3">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-sans font-medium border ${
-                        isTail 
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' 
-                          : isHead 
-                            ? 'bg-amber-50 text-amber-700 border-amber-200/80' 
-                            : 'bg-slate-50 text-slate-600 border-slate-200/70'
-                      }`}>
-                        {t.wind_effect ?? 'Nominal'} ({windComp >= 0 ? '+' : ''}{windComp} m/s)
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-amber-700 font-semibold">
-                      {(t.power_watts ?? 180).toFixed(0)} W
-                    </td>
-                    <td className="py-2.5 px-3 font-sans">
-                      <span className="px-2.5 py-0.5 rounded-md text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200/80">
-                        {t.flight_phase ?? 'CRUISE'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                      <td className="py-2 px-3 font-semibold text-slate-800">{gSpeed} m/s</td>
+                      <td className="py-2 px-3 text-slate-600">{windComp >= 0 ? `+${windComp}` : windComp} m/s</td>
+                      <td className="py-2 px-3 text-amber-700 font-semibold">{(t.power_watts ?? 180).toFixed(0)}W</td>
+                      <td className="py-2 px-3 font-sans">
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200/80">
+                          {t.flight_phase ?? 'CRUISE'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -598,52 +598,163 @@ export default function OperationsMap({
       ctx.fill();
     }
 
-    // Base Depot Marker on Light Canvas
+    // Base Depot Marker on Light Canvas (Tactical Heli-pad & Ground Station Hub)
+    ctx.save();
+    // Outer perimeter security ring with soft sky glow
     ctx.beginPath();
-    ctx.arc(depotX, depotY, 18, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(2, 132, 199, 0.10)';
+    ctx.arc(depotX, depotY, 22, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(2, 132, 199, 0.08)';
     ctx.fill();
+    ctx.strokeStyle = 'rgba(2, 132, 199, 0.35)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([3, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
-    ctx.fillStyle = '#0284C7';
+    // 4 Compass crosshair ticks
+    ctx.strokeStyle = 'rgba(2, 132, 199, 0.6)';
+    ctx.lineWidth = 1.5;
+    [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].forEach((ang) => {
+      ctx.beginPath();
+      ctx.moveTo(depotX + Math.cos(ang) * 19, depotY + Math.sin(ang) * 19);
+      ctx.lineTo(depotX + Math.cos(ang) * 25, depotY + Math.sin(ang) * 25);
+      ctx.stroke();
+    });
+
+    // Solid core launch pad
     ctx.beginPath();
-    ctx.arc(depotX, depotY, 7.5, 0, Math.PI * 2);
+    ctx.arc(depotX, depotY, 9, 0, Math.PI * 2);
+    ctx.fillStyle = '#0284C7';
     ctx.fill();
     ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 2;
     ctx.stroke();
 
-    ctx.fillStyle = '#0284C7';
-    ctx.font = '700 10px JetBrains Mono, monospace';
-    ctx.fillText('DEPOT', depotX + 13, depotY + 3.5);
+    // Center helipad H marking
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '700 8px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('H', depotX, depotY + 0.5);
 
-    // 4. Planned Flight Corridors (progressive reveal, high-contrast)
+    // Clean Depot Badge
+    ctx.textAlign = 'left';
+    ctx.font = '700 9px JetBrains Mono, monospace';
+    ctx.fillStyle = '#0f172a';
+    ctx.fillText('DEPOT', depotX + 16, depotY + 1);
+    ctx.fillStyle = '#64748b';
+    ctx.font = '500 8px Inter, sans-serif';
+    ctx.fillText('BASE OPS', depotX + 16, depotY + 9.5);
+    ctx.restore();
+
+    // 4. Planned Flight Corridors (Multi-Layered Vector Channels with Aerodynamic Flow)
     const routes = schedule?.assigned_routes ?? [];
     if (showFlightPaths) {
+      const totalFleet = Math.max(1, activeFleetSize);
+
       routes.forEach((route, rIdx) => {
         const color = DRONE_COLORS[rIdx % DRONE_COLORS.length];
         const wps = route.waypoints ?? [];
         if (wps.length < 2) return;
 
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2.4;
-        ctx.lineCap = 'round';
-        ctx.globalAlpha = Math.min(1.0, 0.2 + revealProgress * 0.78);
-        ctx.beginPath();
+        // Origin & return at each UAV's designated apron pad (avoids central knot)
+        const apronPos = getApronParkPosition(rIdx, totalFleet, depotX, depotY);
+
+        const pts = [];
         wps.forEach((wp, idx) => {
+          const isFirst = idx === 0;
+          const isLast = idx === wps.length - 1;
           const node = targets.find((t) => t.id === wp.node_id);
-          if (node) {
-            const cx = toCanvasX(node.x, width);
-            const cy = toCanvasY(node.y, height);
-            if (idx === 0) ctx.moveTo(cx, cy);
-            else ctx.lineTo(cx, cy);
+          const isDepot = node && (instance?.depot_ids ?? [0]).includes(node.id);
+
+          if (isFirst && isDepot) {
+            pts.push({ x: apronPos.x, y: apronPos.y });
+          } else if (isLast && isDepot) {
+            pts.push({ x: apronPos.x, y: apronPos.y });
+          } else if (node) {
+            pts.push({ x: toCanvasX(node.x, width), y: toCanvasY(node.y, height) });
           }
         });
+
+        if (pts.length < 2) return;
+
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        const alpha = Math.min(1.0, 0.25 + revealProgress * 0.75);
+
+        // Aerodynamic corner filleting for smooth bank turns
+        const traceCorridor = (filletR = 10) => {
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length - 1; i++) {
+            const pPrev = pts[i - 1];
+            const pCur = pts[i];
+            const pNext = pts[i + 1];
+            const dPrev = Math.hypot(pCur.x - pPrev.x, pCur.y - pPrev.y);
+            const dNext = Math.hypot(pNext.x - pCur.x, pNext.y - pCur.y);
+            const r = Math.min(filletR, dPrev / 2.2, dNext / 2.2);
+            if (r > 1.5) {
+              ctx.arcTo(pCur.x, pCur.y, pNext.x, pNext.y, r);
+            } else {
+              ctx.lineTo(pCur.x, pCur.y);
+            }
+          }
+          ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+        };
+
+        // Layer 1: Wide Translucent Flight Corridor Buffer (adds realistic depth)
+        traceCorridor(12);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 7;
+        ctx.globalAlpha = alpha * 0.15;
         ctx.stroke();
-        ctx.globalAlpha = 1.0;
+
+        // Layer 2: Precision Flight Vector Core
+        traceCorridor(10);
+        ctx.lineWidth = 2.4;
+        ctx.globalAlpha = alpha * 0.88;
+        ctx.stroke();
+
+        // Layer 3: High-Visibility Directional Pulse Stream (animated dashes flowing forward)
+        traceCorridor(10);
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = '#ffffff';
+        ctx.globalAlpha = alpha * 0.95;
+        ctx.setLineDash([4, 14]);
+        ctx.lineDashOffset = -timeSec * 24;
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Layer 4: Sleek Aerodynamic Directional Chevrons along flight corridors
+        for (let i = 0; i < pts.length - 1; i++) {
+          const p1 = pts[i];
+          const p2 = pts[i + 1];
+          const segDist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+          if (segDist > 55) {
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+
+            ctx.save();
+            ctx.translate(midX, midY);
+            ctx.rotate(angle);
+            ctx.beginPath();
+            ctx.moveTo(-3, -2.8);
+            ctx.lineTo(1.8, 0);
+            ctx.lineTo(-3, 2.8);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.6;
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+
+        ctx.restore();
       });
     }
 
-    // 5. Target Nodes with Sector/Drone Color-Coding (Clean on Light Canvas)
+    // 5. Target Nodes: Aerospace Tactical Contacts & Priority Hierarchy
     const securedSet = new Set(securedTargets ?? []);
     const targetToDroneMap = new Map();
     routes.forEach((route, rIdx) => {
@@ -653,76 +764,158 @@ export default function OperationsMap({
       });
     });
 
-    ctx.globalAlpha = Math.min(1.0, 0.4 + revealProgress * 0.6);
+    ctx.globalAlpha = Math.min(1.0, 0.45 + revealProgress * 0.55);
     targets.forEach((node) => {
       const isDepot = (instance?.depot_ids ?? [0]).includes(node.id);
-      if (isDepot) return; // Already drawn depot above
+      if (isDepot) return; // Depot rendered above
 
       const cx = toCanvasX(node.x, width);
       const cy = toCanvasY(node.y, height);
       const isSecured = securedSet.has(node.id);
       const isHovered = hoveredTarget && hoveredTarget.id === node.id;
       const isInspected = selectedInspectorObj === `Target #${node.id.toString().padStart(2, '0')}`;
-
-      const radius = isHovered || isInspected ? 6 : isSecured ? 4.5 : 3.5;
       const droneInfo = targetToDroneMap.get(node.id);
+      const priority = node.priority_score ?? 10;
 
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      // Hierarchy: High-Value (>= 35), Medium (18-34), Standard (< 18)
+      const isHVT = priority >= 35;
+      const isMed = priority >= 18 && priority < 35;
+      const baseR = isHovered || isInspected ? 6.5 : isHVT ? 5.5 : isMed ? 4.6 : 3.8;
 
+      ctx.save();
+
+      // Case A: Visited / Secured Target (Verified contact)
       if (isSecured) {
+        // Soft green aura glow
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR + 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
+        ctx.fill();
+
+        // Solid verified core
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
         ctx.fillStyle = '#059669';
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+
+        // White check pip in center
+        ctx.beginPath();
+        ctx.arc(cx, cy, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+
+      // Case B: Assigned Target (Part of active reconnaissance sortie)
+      } else if (droneInfo) {
+        const accent = droneInfo.color;
+
+        // High-value targets get an outer tactical reticle ring
+        if (isHVT || isHovered || isInspected) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, baseR + 3.8, 0, Math.PI * 2);
+          ctx.strokeStyle = accent;
+          ctx.lineWidth = 1.1;
+          ctx.setLineDash([3, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Core contact disc with subtle shadow
+        ctx.shadowColor = accent;
+        ctx.shadowBlur = 5;
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
+        ctx.fillStyle = accent;
+        ctx.fill();
+
+        // White border ring
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
         ctx.stroke();
-      } else if (droneInfo) {
-        ctx.fillStyle = droneInfo.color;
+
+        // Center optical targeting dot
+        ctx.beginPath();
+        ctx.arc(cx, cy, 1.3, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
         ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.2;
-        ctx.stroke();
+
+      // Case C: Unassigned / Skipped Target (Tactical reserve contact)
       } else {
-        ctx.fillStyle = isHovered || isInspected ? '#0284C7' : '#ffffff';
+        ctx.beginPath();
+        ctx.arc(cx, cy, baseR, 0, Math.PI * 2);
+        ctx.fillStyle = isHovered || isInspected ? '#f1f5f9' : '#ffffff';
         ctx.fill();
         ctx.strokeStyle = isHovered || isInspected ? '#0284C7' : '#94a3b8';
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.3;
         ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, 1.3, 0, Math.PI * 2);
+        ctx.fillStyle = '#94a3b8';
+        ctx.fill();
       }
 
-      // Legible Node ID shown only on hover or selection to keep map canvas clean
-      if (isHovered || isInspected) {
-        ctx.fillStyle = '#64748b';
-        ctx.font = '600 9px JetBrains Mono, monospace';
-        ctx.fillText(`${node.id}`, cx + radius + 4, cy + 2.5);
-      }
-
-      // Tooltip pill on hover or selection
+      // Tactical HUD Lock-On Brackets on Hover or Inspector Selection
       if (isHovered || isInspected) {
         const accentColor = droneInfo ? droneInfo.color : isSecured ? '#059669' : '#0284C7';
+        const bSize = 13;
+        const bLen = 4.2;
+
         ctx.strokeStyle = accentColor;
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 1.8;
+
+        // Top-left bracket
         ctx.beginPath();
-        ctx.arc(cx, cy, radius + 4, 0, Math.PI * 2);
+        ctx.moveTo(cx - bSize, cy - bSize + bLen);
+        ctx.lineTo(cx - bSize, cy - bSize);
+        ctx.lineTo(cx - bSize + bLen, cy - bSize);
         ctx.stroke();
 
+        // Top-right bracket
+        ctx.beginPath();
+        ctx.moveTo(cx + bSize - bLen, cy - bSize);
+        ctx.lineTo(cx + bSize, cy - bSize);
+        ctx.lineTo(cx + bSize, cy - bSize + bLen);
+        ctx.stroke();
+
+        // Bottom-left bracket
+        ctx.beginPath();
+        ctx.moveTo(cx - bSize, cy + bSize - bLen);
+        ctx.lineTo(cx - bSize, cy + bSize);
+        ctx.lineTo(cx - bSize + bLen, cy + bSize);
+        ctx.stroke();
+
+        // Bottom-right bracket
+        ctx.beginPath();
+        ctx.moveTo(cx + bSize - bLen, cy + bSize);
+        ctx.lineTo(cx + bSize, cy + bSize);
+        ctx.lineTo(cx + bSize, cy + bSize - bLen);
+        ctx.stroke();
+
+        // Sleek floating frosted-glass data pill with target ID and score
         const droneTag = droneInfo ? ` (${droneInfo.droneId})` : '';
         const statusTag = isSecured ? ' · SECURED' : '';
-        const label = `Target #${node.id} · ${(node.priority_score || 0).toFixed(0)} pts${droneTag}${statusTag}`;
+        const label = `Target #${node.id} · ${priority.toFixed(0)} PTS${droneTag}${statusTag}`;
         ctx.font = '600 10px Inter, sans-serif';
         const textW = ctx.measureText(label).width;
 
         ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
         ctx.beginPath();
-        drawSafeRoundRect(ctx, cx - textW / 2 - 8, cy - radius - 25, textW + 16, 20, 5);
+        drawSafeRoundRect(ctx, cx - textW / 2 - 8, cy - baseR - 26, textW + 16, 20, 5);
         ctx.fill();
         ctx.strokeStyle = accentColor;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = 1.2;
         ctx.stroke();
 
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText(label, cx - textW / 2, cy - radius - 11);
+        ctx.fillText(label, cx - textW / 2, cy - baseR - 12);
       }
+
+      ctx.restore();
     });
     ctx.globalAlpha = 1.0;
 
