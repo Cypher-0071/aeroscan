@@ -269,6 +269,7 @@ export default function App() {
               instance={instance}
               schedule={schedule}
               missionTime={missionTime}
+              setMissionTime={setMissionTime}
               windSpeed={windSpeed}
               windDir={windDir}
               fleetSize={fleetSize}
