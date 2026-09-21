@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Terminal
 } from 'lucide-react';
+import CustomSelect from './CustomSelect';
 
 export default function MissionExport({
   instance,
@@ -164,17 +165,15 @@ export default function MissionExport({
             </div>
 
             <div className="space-y-1">
-              <select
+              <CustomSelect
                 value={selectedDroneId}
-                onChange={(e) => setSelectedDroneId(e.target.value)}
-                className="glass-input w-full rounded-xl px-3 py-2 text-xs font-sans text-slate-800 bg-white/80 cursor-pointer"
-              >
-                {routes.map((r) => (
-                  <option key={r.drone_id} value={r.drone_id} className="bg-white text-slate-800">
-                    {r.drone_id} ({(r.target_ids?.length ?? 0)} nodes · {(r.final_reserve_percent ?? 100).toFixed(0)}% reserve)
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedDroneId(val)}
+                options={routes.map((r) => ({
+                  value: r.drone_id,
+                  label: r.drone_id,
+                  badge: `${r.target_ids?.length ?? 0} nodes · ${(r.final_reserve_percent ?? 100).toFixed(0)}% reserve`,
+                }))}
+              />
             </div>
 
             {/* Mission Corridor Summary Card */}

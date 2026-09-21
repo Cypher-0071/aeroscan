@@ -34,7 +34,7 @@ export default function App() {
   const handleIntroComplete = useCallback(() => {
     setShowIntro(false);
     setActiveTab('map');
-    // Trigger the drone flying in from top and landing onto the depot immediately
+    // Trigger the drone squadron flying in from top and landing onto the depot immediately
     setTriggerLandingAnim(true);
   }, []);
 
@@ -217,10 +217,6 @@ export default function App() {
           windSpeed={windSpeed}
           windDir={windDir}
           fleetSize={fleetSize}
-          onReplayIntro={() => {
-            setShowIntro(true);
-            setTriggerLandingAnim(false);
-          }}
         />
 
         {/* Content Area */}

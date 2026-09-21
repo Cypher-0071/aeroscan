@@ -12,6 +12,7 @@ import {
   Cpu,
   Wind
 } from 'lucide-react';
+import CustomSelect from './CustomSelect';
 
 const WORKSPACE_TABS = [
   { id: 'map', label: 'Operations Map', icon: Compass },
@@ -22,11 +23,11 @@ const WORKSPACE_TABS = [
 ];
 
 const SCENARIOS = [
-  { id: 'Chao Set 64 (Clustered SAR)', label: 'Chao Set 64 (Clustered SAR)' },
-  { id: 'Chao Set 66 (Diamond Perimeter)', label: 'Chao Set 66 (Diamond Perimeter)' },
-  { id: 'Chao Set 100 (Concentric Grid)', label: 'Chao Set 100 (Concentric Grid)' },
-  { id: 'Chao Set 102 (Uniform Scatter)', label: 'Chao Set 102 (Uniform Scatter)' },
-  { id: 'Sample Mountain SAR', label: 'Sample Mountain SAR' },
+  { value: 'Chao Set 64 (Clustered SAR)', label: 'Chao Set 64 (Clustered SAR)', badge: '64 nodes' },
+  { value: 'Chao Set 66 (Diamond Perimeter)', label: 'Chao Set 66 (Diamond Perimeter)', badge: '66 nodes' },
+  { value: 'Chao Set 100 (Concentric Grid)', label: 'Chao Set 100 (Concentric Grid)', badge: '100 nodes' },
+  { value: 'Chao Set 102 (Uniform Scatter)', label: 'Chao Set 102 (Uniform Scatter)', badge: '102 nodes' },
+  { value: 'Sample Mountain SAR', label: 'Sample Mountain SAR', badge: 'GeoJSON' },
 ];
 
 const getCardinal = (deg) => {
@@ -149,17 +150,11 @@ export default function Sidebar({
           {/* Scenario Selector */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-600">Scenario Preset</label>
-            <select
+            <CustomSelect
               value={scenario}
-              onChange={(e) => setScenario(e.target.value)}
-              className="glass-input w-full rounded-lg px-2.5 py-1.5 text-xs text-slate-800 cursor-pointer bg-white/80"
-            >
-              {SCENARIOS.map((s) => (
-                <option key={s.id} value={s.id} className="bg-white text-slate-800">
-                  {s.label}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setScenario(val)}
+              options={SCENARIOS}
+            />
           </div>
 
           {/* Fleet Size Slider */}
@@ -213,51 +208,24 @@ export default function Sidebar({
             />
           </div>
 
-          {/* Dynamic Execution Dependence Impact Card */}
-          <div className="rounded-xl p-3 bg-slate-50/90 border border-slate-200/80 space-y-2 text-xs">
-            <div className="flex items-center justify-between font-medium text-slate-700">
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-900">
-                <Wind className="w-3.5 h-3.5 text-sky-600" />
-                <span>Execution Dynamics</span>
+          {/* Clean Atmospheric Impact Summary */}
+          <div className="rounded-xl p-2.5 bg-slate-50/80 border border-slate-200/70 space-y-1.5 text-xs">
+            <div className="flex items-center justify-between text-[11px] text-slate-600">
+              <span className="flex items-center gap-1 font-medium">
+                <Wind className="w-3 h-3 text-sky-600" />
+                <span>Atmosphere</span>
               </span>
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-sky-100 text-sky-800 font-semibold">
-                {cardinalDir} · {windRating}
+              <span className="font-mono text-slate-800 font-semibold">
+                {windSpeed.toFixed(1)} m/s · {cardinalDir}
               </span>
             </div>
 
-            <div className="space-y-1 text-[11px] pt-1.5 border-t border-slate-200/70">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Fleet Capacity:</span>
-                <span className="font-mono text-slate-800 font-semibold">
-                  {fleetSize} UAVs ({fleetCapacityLabel})
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Headwind Speed:</span>
-                <span className="font-mono font-semibold text-amber-700">
-                  {minGroundspeed} m/s <span className="text-slate-400 font-normal">(-{windSpeed.toFixed(1)})</span>
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Tailwind Speed:</span>
-                <span className="font-mono font-semibold text-emerald-600">
-                  {maxGroundspeed} m/s <span className="text-slate-400 font-normal">(+{windSpeed.toFixed(1)})</span>
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Upwind Energy Drag:</span>
-                <span className="font-mono font-semibold text-rose-600">
-                  +{energyImpactPct}% Watts
-                </span>
-              </div>
+            <div className="flex justify-between text-[11px] pt-1 border-t border-slate-200/60">
+              <span className="text-slate-500">Groundspeed:</span>
+              <span className="font-mono font-medium text-slate-700">
+                {minGroundspeed} – {maxGroundspeed} m/s
+              </span>
             </div>
-
-            {isParamsChanged && (
-              <div className="pt-1.5 border-t border-amber-200/70 flex items-center gap-1.5 text-[10px] text-amber-800 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
-                <span>Modified • Click Run Optimizer to solve</span>
-              </div>
-            )}
           </div>
 
           {/* Action Buttons */}
@@ -295,21 +263,14 @@ export default function Sidebar({
         </div>
       </div>
 
-      {/* System Hardware Status Footer */}
-      <div className="p-3.5 border-t border-slate-200/80 bg-white/40">
-        <div className="grid grid-cols-3 gap-1.5 text-center text-[10px] font-sans">
-          <div className="glass-pill flex items-center justify-center gap-1 py-1 px-1.5 rounded-md text-slate-600 font-medium">
-            <Radio className="w-2.5 h-2.5 text-emerald-600" />
-            <span>RTK Lock</span>
-          </div>
-          <div className="glass-pill flex items-center justify-center gap-1 py-1 px-1.5 rounded-md text-slate-600 font-medium">
-            <Shield className="w-2.5 h-2.5 text-sky-600" />
-            <span>AES-256</span>
-          </div>
-          <div className="glass-pill flex items-center justify-center gap-1 py-1 px-1.5 rounded-md text-emerald-700 font-medium">
+      {/* System Status Footer */}
+      <div className="p-3 border-t border-slate-200/70 bg-white/40">
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="text-slate-500">System Status</span>
+          <span className="text-emerald-700 font-medium flex items-center gap-1.5 font-mono text-[10px]">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Deconflict</span>
-          </div>
+            Ready
+          </span>
         </div>
       </div>
     </aside>
